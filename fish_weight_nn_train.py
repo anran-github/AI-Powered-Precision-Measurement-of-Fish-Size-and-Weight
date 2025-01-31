@@ -11,7 +11,7 @@ import os
 import argparse
 
 from fish_weight_dataset import WeightData
-from fish_weight_model import WeightNet
+from fish_weight_model import WeightNet, WeightNet_CPR
 
 
 # CHECK GPU/CPU
@@ -27,7 +27,7 @@ parser.add_argument('--label_excel',type=str,default='/media/anranli/DATA/data/f
 parser.add_argument('--lr',type=float, default=0.00002, help='learning rate')
 parser.add_argument('--batch_size',type=int, default=1024, help='batch size')
 parser.add_argument('--total_epoch',type=int, default=500, help='batch size')
-parser.add_argument('--pre_trained', type=str, default='fish_saved_weights/model_epoch80_0.15009590983390808.pth',help='input your pretrained weight path if you want')
+parser.add_argument('--pre_trained', type=str, default='',help='input your pretrained weight path if you want')
 
 args = parser.parse_args()
 
@@ -37,7 +37,8 @@ print(args)
 
 
 # import network
-model = WeightNet().to(device)
+# model = WeightNet().to(device)
+model = WeightNet_CPR().to(device)
 
 # import dataset
 data_train = WeightData(input_path=args.input_path,label_path=args.label_excel,mode='train')
@@ -48,7 +49,7 @@ train_loader = DataLoader(data_train,batch_size=args.batch_size,shuffle=True)
 test_loader = DataLoader(data_test,batch_size=args.batch_size,shuffle=False)
 
 
-save_path = f'fish_saved_weights'
+save_path = f'fish_cpr_saved_weights'
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -151,9 +152,9 @@ for epoch in range(args.total_epoch):
         mse_loss = criterion(outputs.squeeze(1), targets.to(device))
 
         # uncomment to introduce weights:
-        loss = (weights * mse_loss).sum() 
+        # loss = (weights * mse_loss).sum() 
 
-        # loss = (mse_loss).sum() 
+        loss = (mse_loss).sum() 
 
 
 

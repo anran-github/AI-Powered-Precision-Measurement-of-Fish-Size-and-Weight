@@ -4,7 +4,9 @@ import argparse
 import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+
 
 # plot
 import matplotlib.pyplot as plt
@@ -24,6 +26,62 @@ parser.add_argument('--pre_trained', type=str, default='',help='input your pretr
 args = parser.parse_args()
 
 print(args)
+
+
+
+
+plt.rcParams['text.usetex'] = True
+plt.rcParams.update({'font.size': 16})
+plt.rcParams["font.family"] = "Times New Roman"
+
+def predict_label_error_fit(true_labels,predicted_data):
+    # Example data
+    # true_labels = np.array([1, 3, 5, 7, 9, 2, 4, 6, 8, 10])
+    # predicted_data = np.array([1.1, 2.9, 4.8, 6.7, 8.9, 2.2, 3.9, 6.1, 7.8, 9.7])
+
+    # Sort the data by true_labels
+    sorted_indices = np.argsort(true_labels)
+    true_labels_sorted = true_labels[sorted_indices]
+    predicted_data_sorted = predicted_data[sorted_indices]
+
+    # Fit a linear regression model
+    model = LinearRegression()
+    true_labels_sorted_reshaped = true_labels_sorted.reshape(-1, 1)  # Reshape for sklearn
+    model.fit(true_labels_sorted_reshaped, predicted_data_sorted)
+
+    # Get the fit line
+    predicted_fit = model.predict(true_labels_sorted_reshaped)
+
+    # Calculate R^2
+    r2 = r2_score(predicted_data_sorted, predicted_fit)
+    rmse = np.sqrt(mean_squared_error(predicted_data_sorted, true_labels_sorted_reshaped))
+
+    # Plot the data
+    plt.figure(figsize=(8, 6))
+    plt.scatter(true_labels_sorted, predicted_data_sorted, label='Weight Data Points')
+    plt.plot(true_labels_sorted, predicted_fit, color='black',linestyle='--', linewidth=4, label=f'Fit line')
+    
+    # Add RMSE and R^2 values as text in the bottom-right corner
+    plt.text(
+        x=0.95, y=0.05,  # Coordinates relative to the axis (0.95 = 95% of x, 0.05 = 5% of y)
+        s=f'R² = {r2:.3}\nRMSE = {rmse:.3f}\nSample Size = {true_labels_sorted.shape[0]}',
+        color='black',
+        horizontalalignment='right', verticalalignment='bottom',
+        transform=plt.gca().transAxes,  # Use axis coordinates for positioning
+        bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray')
+    )
+    
+    # Add labels, legend, and title
+    plt.xlabel('Measured Weight [g]')
+    plt.ylabel('Predicted Weight [g]')
+    # plt.title('Measured Weight versus Predicted with Fit Line')
+    plt.legend()
+    plt.grid(linestyle = '--')
+    plt.tight_layout()
+    plt.savefig('paper_image/weight_xgboost_error_eval.png')
+    plt.show()
+
+
 
 
 
@@ -116,7 +174,14 @@ print(f'\nWeight Error:\nAverage: {np.mean(error)} g,',
         f'\nMin : {np.min(error)} g,',
         f'\nMedian : {np.median(error)} g')
 
+# remove max error image:
+y_test = np.delete(y_test,[np.argmax(error)],None)
+y_pred = np.delete(y_pred,[np.argmax(error)],None)
 
+predict_label_error_fit(y_test,y_pred)
+
+
+'''
 # Create figure and axes
 fig, ax1 = plt.subplots(figsize=(10, 6))
 
@@ -142,3 +207,4 @@ ax2.legend(loc='upper right')
 plt.savefig('XGBoost_result.png')
 # Show the plot
 plt.show()
+'''

@@ -134,20 +134,20 @@ fish_pathes = [
                '/media/anranli/DATA/data/fish/Growth Study Day 4 [12-30-24]',
                '/media/anranli/DATA/data/fish/Tk 4 - varied data',
                '/media/anranli/DATA/data/fish/Tk 5 - varied data']
-save_path = 'bbox_area_dataset.json'
+save_path = 'bbox_area_dataset_no_bbox_optimization.json'
 res = []
 for fish_path in fish_pathes:
     fish_list = os.listdir(fish_path)
 
-    img_higherror_list =  ["/media/anranli/DATA/data/fish/Growth Study Day 3 [12-18-24]/57.JPG"]
+    # img_higherror_list =  ["/media/anranli/DATA/data/fish/Growth Study Day 3 [12-18-24]/57.JPG"]
     
-    # for fish_i in tqdm(fish_list):
-    for fish_i in img_higherror_list:
+    for fish_i in tqdm(fish_list):
+    # for fish_i in img_higherror_list:
         if not fish_i.endswith(('.JPG','.jpeg')):
             continue
         
-        # fish_bgr_np = cv2.imread(os.path.join(fish_path,fish_i))
-        fish_bgr_np = cv2.imread(fish_i)
+        fish_bgr_np = cv2.imread(os.path.join(fish_path,fish_i))
+        # fish_bgr_np = cv2.imread(fish_i)
         visulize_img_bgr = fish_bgr_np.copy()
 
         visulize_img_rgb = cv2.cvtColor(fish_bgr_np, cv2.COLOR_BGR2RGB)
@@ -164,11 +164,11 @@ for fish_path in fish_pathes:
 
             croped_fish_mask = segmented_polygons.mask_polygon(cropped_fish_rgb)
 
-            # output_seg = cv2.cvtColor(croped_fish_mask, cv2.COLOR_RGB2BGR)
-            cv2.imwrite('cropped_fish.png',croped_fish_mask)
-            cv2.imshow('cropped fish mask',croped_fish_mask)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            # # output_seg = cv2.cvtColor(croped_fish_mask, cv2.COLOR_RGB2BGR)
+            # cv2.imwrite('cropped_fish.png',croped_fish_mask)
+            # cv2.imshow('cropped fish mask',croped_fish_mask)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
 
 
             croped_fish_mask = np.zeros_like(cropped_fish_rgb)
@@ -178,59 +178,59 @@ for fish_path in fish_pathes:
 
             # =================ROTATION FISH EXP===============================
 
-            # Load the binary segmented mask
-            mask = croped_fish_mask.copy()
+            # # Load the binary segmented mask
+            # mask = croped_fish_mask.copy()
 
-            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+            # mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
 
-            # Ensure the mask is binary
-            # _, binary_mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+            # # Ensure the mask is binary
+            # # _, binary_mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
 
-            # Find contours
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # # Find contours
+            # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # Assuming the object is represented by the largest contour
-            contour = max(contours, key=cv2.contourArea)
+            # # Assuming the object is represented by the largest contour
+            # contour = max(contours, key=cv2.contourArea)
             
             
-            # cv2.drawContours(mask, [contour], -1, (0, 255, 0), 2) 
-            # cv2.imshow('contour find',mask)
+            # # cv2.drawContours(mask, [contour], -1, (0, 255, 0), 2) 
+            # # cv2.imshow('contour find',mask)
+            # # cv2.waitKey(0)
+            # # cv2.destroyAllWindows()
+
+            # # Compute the minimum area rotated bounding rectangle
+            # rect = cv2.minAreaRect(contour)
+
+            # # Get the box points (corner points of the rotated rectangle)
+            # boxx = cv2.boxPoints(rect)
+
+            # # return location to origon image:
+            # boxx[:,0] += box.x1
+            # boxx[:,1] += box.y1
+            # boxx = np.intp(boxx)  # Convert to integer
+
+            # # ******Reculate width and height --> Directly applied as fish size *******
+            # fish_height = np.sqrt((boxx[0,0]-boxx[1,0])**2 + (boxx[0,1]-boxx[1,1])**2 )
+            # fish_width = np.sqrt((boxx[2,0]-boxx[1,0])**2 + (boxx[2,1]-boxx[1,1])**2 )
+            # if fish_height > fish_width:
+            #     # swap height and width
+            #     tmp = fish_height
+            #     fish_height = fish_width
+            #     fish_width = tmp
+
+
+            # # BBOX VERIFY:
+            # # Draw the bounding box on the ori image (for visualization)
+            # print(f'width: {fish_width}')
+            # cv2.drawContours(visulize_img, [boxx], 0, (0, 255, 0), 4)
+            # # Display the result
+            # visulize_img = cv2.cvtColor(visulize_img,cv2.COLOR_RGB2BGR)
+            # imS = cv2.resize(visulize_img, (visulize_img.shape[1]//4, visulize_img.shape[0]//4))                # Resize image
+            # cv2.imwrite('final_visual.png',imS)
+            # cv2.imshow("output", imS) 
+            # # cv2.imshow('Rotated Bounding Box', visulize_img)
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
-
-            # Compute the minimum area rotated bounding rectangle
-            rect = cv2.minAreaRect(contour)
-
-            # Get the box points (corner points of the rotated rectangle)
-            boxx = cv2.boxPoints(rect)
-
-            # return location to origon image:
-            boxx[:,0] += box.x1
-            boxx[:,1] += box.y1
-            boxx = np.intp(boxx)  # Convert to integer
-
-            # ******Reculate width and height --> Directly applied as fish size *******
-            fish_height = np.sqrt((boxx[0,0]-boxx[1,0])**2 + (boxx[0,1]-boxx[1,1])**2 )
-            fish_width = np.sqrt((boxx[2,0]-boxx[1,0])**2 + (boxx[2,1]-boxx[1,1])**2 )
-            if fish_height > fish_width:
-                # swap height and width
-                tmp = fish_height
-                fish_height = fish_width
-                fish_width = tmp
-
-
-            # BBOX VERIFY:
-            # Draw the bounding box on the ori image (for visualization)
-            print(f'width: {fish_width}')
-            cv2.drawContours(visulize_img, [boxx], 0, (0, 255, 0), 4)
-            # Display the result
-            visulize_img = cv2.cvtColor(visulize_img,cv2.COLOR_RGB2BGR)
-            imS = cv2.resize(visulize_img, (visulize_img.shape[1]//4, visulize_img.shape[0]//4))                # Resize image
-            cv2.imwrite('final_visual.png',imS)
-            cv2.imshow("output", imS) 
-            # cv2.imshow('Rotated Bounding Box', visulize_img)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
 
             # =================================================================
 
@@ -245,12 +245,12 @@ for fish_path in fish_pathes:
             # label = f"{classification_result[0]['name']} | {round(classification_result[0]['accuracy'], 3)}" if len(classification_result) else "Not Found"
             # box.draw_label(visulize_img, label)
             # box.draw_box(visulize_img)
-            res.append([os.path.join(fish_path,fish_i),fish_width,fish_height,segmented_polygons.to_dict()['area']])
-            # res.append([box.width,box.height,segmented_polygons.to_dict()['area']])
+            # res.append([os.path.join(fish_path,fish_i),fish_width,fish_height,segmented_polygons.to_dict()['area']])
+            res.append([os.path.join(fish_path,fish_i),box.width,box.height,segmented_polygons.to_dict()['area']])
 
 
 
 
-# with open(save_path,'w') as f:
-#     json.dump(res,f)
-#     # f.write(';\n')
+with open(save_path,'w') as f:
+    json.dump(res,f)
+    # f.write(';\n')

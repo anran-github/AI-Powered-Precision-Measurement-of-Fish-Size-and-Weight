@@ -34,6 +34,7 @@ def crop_selected_img(image):
         if w > 0 and h > 0:
             
             roi = image[y1:y2, x1:x2]
+            cv2.imwrite('paper_image/cropped_dot.png',roi)
             cv2.imshow("Processed ROI", roi)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
@@ -121,6 +122,8 @@ for image_path in image_paths:
     print(f'pi={perimeter/diameter}')
     print(f'Unit pixel size = {1.27/diameter} cm/pixel')
     print(20*'==')
+
+    cv2.imwrite('paper_image/cropped_dot_found.png',out_img)
     cv2.imshow("Fish Boundary", out_img)
 
     # Wait and close the windows

@@ -79,6 +79,36 @@ class WeightNet0(nn.Module):
         return x.view(x.size(0), -1)  # Reshape back to (2, n)
 
 
+
+class WeightNet_CPR(nn.Module):
+    def __init__(self, input_size=3, hidden_size=7, output_size=1):
+        super(WeightNet_CPR, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        # self.batchnorm = nn.BatchNorm1d(hidden_size)
+        # self.fc2 = nn.Linear(hidden_size1, hidden_size2*2)
+        # self.fc2_1 = nn.Linear(hidden_size2*2, hidden_size2*4)
+        # self.fc2_1_1 = nn.Linear(hidden_size2*4, hidden_size2*4)
+        # self.fc2_1_2 = nn.Linear(hidden_size2*4, hidden_size2*2)
+        # self.fc2_2 = nn.Linear(hidden_size2*2, hidden_size2)
+        self.fc3 = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(0.5)
+        
+    def forward(self, x):
+        x = x.view(x.size(0), -1)  # Flatten the input
+        # x = torch.relu(self.batchnorm(self.fc1(x)))
+        x = torch.relu(self.fc1(x))
+        # x = torch.relu(self.fc2(x))
+        # x = torch.relu(self.fc2_1(x))
+        # x = torch.relu(self.fc2_1_1(x))
+        # x = self.dropout(x)
+        # x = torch.relu(self.fc2_1_2(x)) 
+        # x = torch.relu(self.fc2_2(x))
+        x = self.dropout(x)
+        x = self.fc3(x)
+        
+        return x.view(x.size(0), -1)  # Reshape back to (2, n)
+
+
 '''
 # Define input and output sizes
 input_size = 3

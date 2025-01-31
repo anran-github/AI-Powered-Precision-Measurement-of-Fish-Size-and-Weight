@@ -1,35 +1,38 @@
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
-# Example data (replace these with your actual y_pred and y_test)
-y_pred = np.array([3.5, 4.2, 5.1, 4.8, 3.9])
-y_test = np.array([3.0, 4.5, 5.0, 4.7, 4.0])
 
-# Calculate error
-error = y_test - y_pred
+def predict_label_error_fit(true_labels,predicted_data):
+    # Example data
+    # true_labels = np.array([1, 3, 5, 7, 9, 2, 4, 6, 8, 10])
+    # predicted_data = np.array([1.1, 2.9, 4.8, 6.7, 8.9, 2.2, 3.9, 6.1, 7.8, 9.7])
 
-# Create figure and axes
-fig, ax1 = plt.subplots()
+    # Sort the data by true_labels
+    sorted_indices = np.argsort(true_labels)
+    true_labels_sorted = true_labels[sorted_indices]
+    predicted_data_sorted = predicted_data[sorted_indices]
 
-# Plot the first dataset (predicted weights)
-ax1.bar(range(y_pred.shape[0]), y_pred, width=0.4, align='center', label='Predicted Weights', alpha=0.5)
+    # Fit a linear regression model
+    model = LinearRegression()
+    true_labels_sorted_reshaped = true_labels_sorted.reshape(-1, 1)  # Reshape for sklearn
+    model.fit(true_labels_sorted_reshaped, predicted_data_sorted)
 
-# Plot the second dataset (true weights), shifted to the right
-ax1.bar(np.arange(y_pred.shape[0]) + 0.4, y_test, width=0.4, align='center', label='True Weights', alpha=0.5)
+    # Get the fit line
+    predicted_fit = model.predict(true_labels_sorted_reshaped)
 
-# Set labels and title for the first y-axis
-ax1.set_xlabel('Images')
-ax1.set_ylabel('Weights [g]')
-ax1.set_title('Block Diagram with Two Datasets and Error')
-ax1.legend(loc='upper left')
+    # Calculate R^2
+    r2 = r2_score(predicted_data_sorted, predicted_fit)
 
-# Create a second y-axis for the error line plot
-ax2 = ax1.twinx()
-ax2.plot(range(error.shape[0]), error, color='red', marker='o', label='Error')
-ax2.set_ylabel('Error [g]')
+    # Plot the data
+    plt.scatter(true_labels_sorted, predicted_data_sorted, color='blue', label='Data points')
+    plt.plot(true_labels_sorted, predicted_fit, color='red', label=f'Fit line (R² = {r2:.2f})')
 
-# Add a legend for the second y-axis
-ax2.legend(loc='upper right')
-
-# Show the plot
-plt.show()
+    # Add labels, legend, and title
+    plt.xlabel('True Labels (Sorted)')
+    plt.ylabel('Predicted Data')
+    plt.title('True vs Predicted with Fit Line')
+    plt.legend()
+    plt.grid(True)
+    plt.show()

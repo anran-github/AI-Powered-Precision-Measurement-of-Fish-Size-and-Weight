@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Detection Platform</title>
+    <script>
+        async function loadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function (e) {
+                const imageData = e.target.result;
+                document.getElementById("inputImage").src = imageData;
+
+                // Send the image to the backend API
+                const formData = new FormData();
+                // formData.append("file", file);
+                formData.append("image", file);
+
+                const response = await fetch("http://127.0.0.1:5000/segment", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                // Draw bounding box
+                drawBoundingBox(imageData, result.bounding_box);
+
+                // Display bounding box details
+                document.getElementById("accuracy").innerText = `Accuracy: ${result.accuracy.toFixed(2)}%`;
+                document.getElementById("bbox_size").innerText = `Width: ${result.bounding_box[2]} px, Height: ${result.bounding_box[3]} px`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function drawBoundingBox(imageSrc, bbox) {
+            const img = new Image();
+            img.src = imageSrc;
+
+            img.onload = function () {
+                const canvas = document.getElementById("canvas");
+                const ctx = canvas.getContext("2d");
+
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                // Draw bounding box
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(bbox[0], bbox[1], bbox[2], bbox[3]);
+            };
+        }
+    </script>
+</head>
+<body>
+    <h2>Object Detection Platform</h2>
+    <input type="file" accept="image/*,video/*" onchange="loadImage(event)">
+    <br><br>
+    
+    <div style="display: flex;">
+        <canvas id="canvas" style="border: 1px solid black;"></canvas>
+        <div style="margin-left: 20px;">
+            <h3>Detection Info</h3>
+            <p id="accuracy">Accuracy: -</p>
+            <p id="bbox_size">Width: -, Height: -</p>
+        </div>
+    </div>
+</body>
+</html>

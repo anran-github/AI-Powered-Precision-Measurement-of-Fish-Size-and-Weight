@@ -8,6 +8,62 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+
+
+
+plt.rcParams['text.usetex'] = True
+plt.rcParams.update({'font.size': 16})
+plt.rcParams["font.family"] = "Times New Roman"
+
+def predict_label_error_fit(true_labels,predicted_data):
+    # Example data
+    # true_labels = np.array([1, 3, 5, 7, 9, 2, 4, 6, 8, 10])
+    # predicted_data = np.array([1.1, 2.9, 4.8, 6.7, 8.9, 2.2, 3.9, 6.1, 7.8, 9.7])
+
+    # Sort the data by true_labels
+    sorted_indices = np.argsort(true_labels)
+    true_labels_sorted = true_labels[sorted_indices]
+    predicted_data_sorted = predicted_data[sorted_indices]
+
+    # Fit a linear regression model
+    model = LinearRegression()
+    true_labels_sorted_reshaped = true_labels_sorted.reshape(-1, 1)  # Reshape for sklearn
+    model.fit(true_labels_sorted_reshaped, predicted_data_sorted)
+
+    # Get the fit line
+    predicted_fit = model.predict(true_labels_sorted_reshaped)
+
+    # Calculate R^2
+    r2 = r2_score(predicted_data_sorted, predicted_fit)
+    rmse = np.sqrt(mean_squared_error(predicted_data_sorted, true_labels_sorted_reshaped))
+
+    # Plot the data
+    plt.figure(figsize=(8, 6))
+    plt.scatter(true_labels_sorted, predicted_data_sorted, label='Weight Data Points')
+    plt.plot(true_labels_sorted, predicted_fit, color='black',linestyle='--', linewidth=4, label=f'Fit line')
+    
+    # Add RMSE and R^2 values as text in the bottom-right corner
+    plt.text(
+        x=0.95, y=0.05,  # Coordinates relative to the axis (0.95 = 95% of x, 0.05 = 5% of y)
+        s=f'R² = {r2:.2f}\nRMSE = {rmse:.2f}\nSample Size = {true_labels_sorted.shape[0]}',
+        color='black',
+        horizontalalignment='right', verticalalignment='bottom',
+        transform=plt.gca().transAxes,  # Use axis coordinates for positioning
+        bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray')
+    )
+    
+    # Add labels, legend, and title
+    plt.xlabel('Measured Length [cm]')
+    plt.ylabel('Predicted Length [cm]')
+    # plt.title('Measured Weight versus Predicted with Fit Line')
+    plt.legend()
+    plt.grid(linestyle = '--')
+    plt.tight_layout()
+    plt.savefig('paper_image/length__noopt_error_eval.png')
+    plt.show()
+
 
 class WeightData(Dataset):
     '''
@@ -135,7 +191,9 @@ class WeightData(Dataset):
 
 
         print('\n Dataset is ready ... ')
-            
+        print(f'Valid Training Set Number: {len(self.valid_dataset_train)}')
+        print(f'Valid Testing Set Number: {len(self.valid_dataset_test)}')
+        print(50*'=')            
          
     
     def __getitem__(self, index):
@@ -214,7 +272,13 @@ class WeightData(Dataset):
         print(f'Problem Image:\n {img_name[:topk,0]}')
 
 
+        # show error with fit line: APPEAR IN PAPER!
+        valida_real_length = np.delete(valida_real_length,[np.argmax(error)],None)
+        valid_est_length = np.delete(valid_est_length,[np.argmax(error)],None)
+        predict_label_error_fit(valida_real_length,valid_est_length)
 
+        # shown error with bar graph
+        '''
         # Predict using the loaded best model
         y_pred = valid_est_length.copy()
         targets = valida_real_length.copy()
@@ -248,7 +312,7 @@ class WeightData(Dataset):
         # Show the plot
         plt.show()
         plt.close()
-
+        '''
 
 
         # Analyze the distribution
@@ -269,8 +333,9 @@ class WeightData(Dataset):
         plt.xlabel('Value [cm]')
         plt.ylabel('Density')
         plt.legend()
+        plt.grid(linestyle='--')
         plt.tight_layout()
-        plt.savefig('length_data_sum.png')
+        plt.savefig('paper_image/length_data_sum.png')
 
         # Show the plot
         plt.show()
@@ -321,8 +386,9 @@ class WeightData(Dataset):
         plt.xlabel('Value [g]')
         plt.ylabel('Density')
         plt.legend()
+        plt.grid(linestyle='--')
         plt.tight_layout()
-        plt.savefig('weight_data_sum.png')
+        plt.savefig('paper_image/weight_data_sum.png')
 
         # Show the plot
         plt.show()
@@ -330,11 +396,8 @@ class WeightData(Dataset):
 
 '''
 from torch.utils.data import DataLoader
-data = WeightData(input_path='bbox_area_dataset.json',label_path='/media/anranli/DATA/data/fish/Growth Study Data 12-2024.xlsx',mode='train')
+data = WeightData(input_path='bbox_area_dataset_no_bbox_optimization.json',label_path='/media/anranli/DATA/data/fish/Growth Study Data 12-2024.xlsx',mode='train')
 data.length_summary()
-data.weight_summary()
-dataloader = DataLoader(data,batch_size=1024,shuffle=True)
+# data.weight_summary()
 
-# for input_data, label in dataloader:
-#     print(input_data,label)
 '''
