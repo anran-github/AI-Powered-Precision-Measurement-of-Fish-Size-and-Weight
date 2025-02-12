@@ -3,71 +3,245 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Object Detection Platform</title>
+    <title>Fish Detector</title>
     <script>
-        async function loadImage(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+let imageFiles = [];
+let currentIndex = 0;
+let detectionResults = [];
 
-            const reader = new FileReader();
-            reader.onload = async function (e) {
-                const imageData = e.target.result;
-                document.getElementById("inputImage").src = imageData;
+// 📌 Load images from the selected folder
+function loadFolder(event) {
+    imageFiles = Array.from(event.target.files).filter(file => file.type.startsWith("image/"));
+    currentIndex = 0;
 
-                // Send the image to the backend API
-                const formData = new FormData();
-                // formData.append("file", file);
-                formData.append("image", file);
+    if (imageFiles.length > 0) {
+        displayImage();
+    } else {
+        alert("No images found in the selected folder.");
+    }
+}
 
-                const response = await fetch("http://127.0.0.1:5000/segment", {
-                    method: "POST",
-                    body: formData
-                });
+// 📌 Display the current image and send it for detection
+function displayImage() {
+    if (currentIndex < 0 || currentIndex >= imageFiles.length) {
+        alert("No more images.");
+        return;
+    }
 
-                const result = await response.json();
+    const file = imageFiles[currentIndex];
+    document.getElementById("imageName").innerText = `Current Image: ${file.name}`;
 
-                // Draw bounding box
-                drawBoundingBox(imageData, result.bounding_box);
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const imageData = e.target.result;
+        const img = new Image();
+        img.src = imageData;
 
-                // Display bounding box details
-                document.getElementById("accuracy").innerText = `Accuracy: ${result.accuracy.toFixed(2)}%`;
-                document.getElementById("bbox_size").innerText = `Width: ${result.bounding_box[2]} px, Height: ${result.bounding_box[3]} px`;
-            };
-            reader.readAsDataURL(file);
+        img.onload = function () {
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            const maxWidth = 800, maxHeight = 600;
+            let width = img.width, height = img.height;
+
+            if (width > maxWidth || height > maxHeight) {
+                const aspectRatio = width / height;
+                if (width > height) {
+                    width = maxWidth;
+                    height = Math.round(width / aspectRatio);
+                } else {
+                    height = maxHeight;
+                    width = Math.round(height * aspectRatio);
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+
+            sendImageToAPI(file, width / img.width, height / img.height);
+        };
+    };
+
+    reader.readAsDataURL(file);
+}
+
+// 📌 Move to the next image in the folder
+function nextImage() {
+    if (currentIndex < imageFiles.length - 1) {
+        currentIndex++;
+        displayImage();
+    } else {
+        alert("You have reached the last image.");
+    }
+}
+
+// 📌 Move to the previous image
+function previousImage() {
+    if (currentIndex > 0) {
+        currentIndex--;
+        displayImage();
+    } else {
+        alert("You are at the first image.");
+    }
+}
+
+// 📌 Send the image to the backend for detection
+async function sendImageToAPI(file, scaleX, scaleY) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("http://127.0.0.1:8000/detect/", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
-        function drawBoundingBox(imageSrc, bbox) {
-            const img = new Image();
-            img.src = imageSrc;
+        const result = await response.json();
+        const bbox = result.bounding_box.map(([x, y]) => [x * scaleX, y * scaleY]);
 
-            img.onload = function () {
-                const canvas = document.getElementById("canvas");
-                const ctx = canvas.getContext("2d");
+        drawBoundingBox(bbox);
 
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
+        document.getElementById("Length").innerText = `Length: ${result.fish_width.toFixed(2)} cm`;
+        document.getElementById("Height").innerText = `Height: ${result.fish_height.toFixed(2)} cm`;
+        document.getElementById("Area").innerText = `Area: ${result.fish_area.toFixed(2)} cm²`;
+        document.getElementById("Weight").innerText = `Weight: ${result.fish_mass.toFixed(2)} g`;
 
-                // Draw bounding box
-                ctx.strokeStyle = "red";
-                ctx.lineWidth = 3;
-                ctx.strokeRect(bbox[0], bbox[1], bbox[2], bbox[3]);
-            };
+        // 📌 Store results in an array for saving later
+        detectionResults = [];
+        detectionResults.push({
+            image_name: file.name,
+            length: result.fish_width.toFixed(2),
+            height: result.fish_height.toFixed(2),
+            area: result.fish_area.toFixed(2),
+            weight: result.fish_mass.toFixed(2)
+        });
+
+    } catch (error) {
+        console.error("Error processing image:", error);
+    }
+}
+
+// 📌 Draw bounding box on detected fish
+function drawBoundingBox(bbox) {
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(bbox[0][0], bbox[0][1]);
+
+    for (let i = 1; i < bbox.length; i++) {
+        ctx.lineTo(bbox[i][0], bbox[i][1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+}
+
+// 📌 Save detection results to Excel
+async function saveResultsToExcel() {
+    if (detectionResults.length === 0) {
+        alert("No data to save.");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://127.0.0.1:8000/save_results/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(detectionResults)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
         }
+
+        alert("Results saved successfully to Excel.");
+    } catch (error) {
+        console.error("Error saving results:", error);
+    }
+}
+
+// 📌 Save results and move to the next image (without alert)
+async function saveResultsAndNext() {
+    if (detectionResults.length === 0) {
+        alert("No data to save.");
+        return;
+    }
+
+    try {
+        await fetch("http://127.0.0.1:8000/save_results/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(detectionResults)
+        });
+
+        nextImage();  // Move to the next image automatically
+    } catch (error) {
+        console.error("Error saving results:", error);
+    }
+}
+
+// 📌 Calibration Function (Runs Only Once)
+async function calibrate(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("http://127.0.0.1:8000/calibrate/", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        alert(`Calibration Successful! Scale Factor: ${result.scale_factor.toFixed(4)} cm/pixel`);
+    } catch (error) {
+        console.error("Error in calibration:", error);
+    }
+}
     </script>
 </head>
 <body>
-    <h2>Object Detection Platform</h2>
-    <input type="file" accept="image/*,video/*" onchange="loadImage(event)">
+    <h2>Fish Detector</h2>
+
+    <input type="file" accept="image/*" webkitdirectory multiple onchange="loadFolder(event)">
     <br><br>
-    
+
+    <h3 id="imageName">Current Image: -</h3>
+
     <div style="display: flex;">
         <canvas id="canvas" style="border: 1px solid black;"></canvas>
         <div style="margin-left: 20px;">
-            <h3>Detection Info</h3>
-            <p id="accuracy">Accuracy: -</p>
-            <p id="bbox_size">Width: -, Height: -</p>
+            <h3>Size Info</h3>
+            <p id="Length">Length: -</p>
+            <p id="Height">Height: -</p>
+            <p id="Area">Area: -</p>
+            <h3>Weight Info</h3>
+            <p id="Weight">Weight: -</p>
         </div>
     </div>
+
+    <button onclick="previousImage()">Previous Image</button>
+    <button onclick="nextImage()">Next Image</button>
+    <button onclick="saveResultsToExcel()">Save Results</button>
+    <button onclick="saveResultsAndNext()">Save Results and Next</button>
+
+
+    <h3>Calibration</h3>
+    <input type="file" accept="image/*" id="calibrationFile" onchange="calibrate(event)">
+    <p>Upload a calibration image (with a known reference object).</p>
+
 </body>
 </html>

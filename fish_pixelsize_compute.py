@@ -44,8 +44,6 @@ def crop_selected_img(image):
     
     return roi
 
-
-
 def find_coin_diameter(image_path):
     # Read the image
     image = cv2.imread(image_path)
@@ -94,7 +92,7 @@ def find_coin_diameter(image_path):
     perimeter = cv2.arcLength(contours[np.argmax(contours_cnt)], True)
     # Draw contours
     output_image = image.copy()
-    cv2.drawContours(output_image, [contours[np.argmax(contours_cnt)]], -1, (0, 255, 0), 2)  # Draw in green with thickness 2
+    cv2.drawContours(output_image, [contours[np.argmax(contours_cnt)]], -1, (0, 255, 0), 4)  # Draw in green with thickness 2
 
     # Find the largest contour (which should be the coin)
     largest_contour = max(contours, key=cv2.contourArea)

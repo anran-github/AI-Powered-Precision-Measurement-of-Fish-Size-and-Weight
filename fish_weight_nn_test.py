@@ -91,8 +91,8 @@ print(args)
 
 
 # import network
-# model = WeightNet().to(device)
-model = WeightNet_CPR().to(device)
+model = WeightNet().to(device)
+# model = WeightNet_CPR().to(device)
 
 # import dataset
 data_train = WeightData(input_path=args.input_path,label_path=args.label_excel,mode='train')
@@ -294,8 +294,8 @@ def test_paper_plot(model, test_loader,epoch):
 
 # weights_path = glob('fish_saved_weights/model_epoch*.pth')
 # weights_path = glob('fish_cpr_saved_weights/model_epoch*.pth')
-# weights_path = ['fish_saved_weights/model_epoch80_0.15009590983390808.pth']
-weights_path = ['fish_cpr_saved_weights/model_epoch495_0.15008985996246338.pth']
+weights_path = ['fish_saved_weights/model_epoch80_0.15009590983390808.pth']
+# weights_path = ['fish_cpr_saved_weights/model_epoch495_0.15008985996246338.pth']
 
 '''
 Currently good weights:

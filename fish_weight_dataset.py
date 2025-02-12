@@ -267,14 +267,14 @@ class WeightData(Dataset):
               f'\nMediam: {np.median(error)} cm')
         
         img_name = valid_image[np.argsort(error)[::-1]]
-        topk = 3
+        topk = 3 # determine how many top error you want to delete
         print(f'Error for each image:\n {error[np.argsort(error)[::-1][:topk]]}')
         print(f'Problem Image:\n {img_name[:topk,0]}')
 
 
         # show error with fit line: APPEAR IN PAPER!
-        valida_real_length = np.delete(valida_real_length,[np.argmax(error)],None)
-        valid_est_length = np.delete(valid_est_length,[np.argmax(error)],None)
+        valida_real_length = np.delete(valida_real_length,[np.argsort(error)[::-1][:topk]],None)
+        valid_est_length = np.delete(valid_est_length,[np.argsort(error)[::-1][:topk]],None)
         predict_label_error_fit(valida_real_length,valid_est_length)
 
         # shown error with bar graph
@@ -394,10 +394,10 @@ class WeightData(Dataset):
         plt.show()
 
 
-'''
+# '''
 from torch.utils.data import DataLoader
 data = WeightData(input_path='bbox_area_dataset_no_bbox_optimization.json',label_path='/media/anranli/DATA/data/fish/Growth Study Data 12-2024.xlsx',mode='train')
 data.length_summary()
 # data.weight_summary()
 
-'''
+# '''
