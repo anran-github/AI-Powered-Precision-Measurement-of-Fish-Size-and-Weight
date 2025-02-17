@@ -6,6 +6,9 @@ This is the source code of the paper:
 
 We provide an auto AI-based fish size and weight estimation platform to speed up fish parameter measurements.
 
+<!-- Overall Process in the paper:
+<img src="paper_image/Screenshot from 2025-02-17 12-34-17.png"> -->
+
 ## Detection Performance
 The size measurement error is less than 0.13 cm. The weight estimation error is less than 0.179 grams. 
 
@@ -52,7 +55,7 @@ XGBoost:
 ## Platform 
 Build with Python API and JavaScript.
 
-<img src="paper_image/Screenshot from 2025-02-11 15-12-15.png" width="250" height="200">
+<img src="paper_image/Screenshot from 2025-02-11 15-12-15.png" >
 
 * Open a calibration reference image to acquire the real size factor first.
 
@@ -60,9 +63,10 @@ Build with Python API and JavaScript.
 * Open a folder with fish images and start your fish size/weight estimation operation.
 
 
-The saved Excel is located in the current project path, with corresponding image names, fish length [cm], width [cm], area [cm $^2$], and weight [g].
+The saved Excel is located in the current project path, with corresponding image names, fish length [cm], height [cm], fish area [cm $^2$], and weight [g].
 
-<img src="paper_image/Screenshot from 2025-02-11 15-08-56.png" width="250" height="200">
+<img src="paper_image/Screenshot from 2025-02-11 15-08-56.png">
+<!-- <img src="paper_image/Screenshot from 2025-02-11 15-08-56.png" width="250" height="200"> -->
 
 ## Acknowledgement
 Fish detection and segmentation pre-trained models:

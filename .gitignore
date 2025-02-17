@@ -156,5 +156,5 @@ cython_debug/
 /data/cache/
 
 models/*
-fish_saved_weights
+# fish_saved_weights
 helper/*
