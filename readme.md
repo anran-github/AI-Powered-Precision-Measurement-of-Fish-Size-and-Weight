@@ -6,8 +6,28 @@ This is the source code of the paper:
 
 We provide an auto AI-based fish size and weight estimation platform to speed up fish parameter measurements.
 
+## Usage
+Ensure all packages are installed in requirements.txt:
+
+    pip install -r requirements.txt
+
+### Run proposed fish measurement platform:
+Start Python API:
+
+    uvicorn main:app --reload
+
+* If above command failed, try:
+
+        python -m uvicorn main:app --reload
+
+Open platform with your browser:
+
+    fish_platform/fish_platform.html
+
 <!-- Overall Process in the paper:
 <img src="paper_image/Screenshot from 2025-02-17 12-34-17.png"> -->
+
+Currently, we only provide weight NN model training/testing codes. See fish_*.py files with relevant names.
 
 ## Detection Performance
 The size measurement error is less than 0.13 cm. The weight estimation error is less than 0.179 grams. 
