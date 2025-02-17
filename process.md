@@ -1,4 +1,12 @@
-# Current Process
+# Fish Size&Weight Estimation Platform
+
+This is the source code of paper:
+
+**AI-Powered Real-Time Precision Measurement of Fish Morphometrics and Weight.**
+
+We provide an auto AI-based fish size&weight estimation platform to speed up fish parameter measurements.
+
+
 
 ## Dataset
 
@@ -18,10 +26,6 @@ Predict Length and Height of a fish.
     Mediam: 0.10247135162353516 cm
 
 
-![alt text](Length_result.png "Title")
-<font color="red">TO DO:
-Get rid of outliers/segment fish manually for further weight prediction.
-</font>
 
 
 ## Weight Prediction
@@ -47,13 +51,17 @@ XGBoost:
 ![alt text](XGBoost_result.png "Title")
 
 
-## Error Evaluation
+## Platform 
 Error results from detection & segmentation:
 
-<img src="error_eg.png" width="250" height="200">
+<img src="paper_image/Screenshot from 2025-02-11 15-12-15.png" width="250" height="200">
+
+* Open a calibration reference image to acquire the real size factor first.
 
 
-* wrong width and height infomation is generated.
+* Open a folder with fish images, and start your fish size/weight estimation operation.
 
 
-Error results from model prediction:
+The saved Excel is located in the current project path, with corresponding image names, fish length [cm], width [cm], area [cm $^2$], and weight [g].
+
+<img src="paper_image/Screenshot from 2025-02-11 15-08-56.png" width="250" height="200">
