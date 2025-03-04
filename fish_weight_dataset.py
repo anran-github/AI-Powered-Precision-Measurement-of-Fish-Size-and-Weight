@@ -41,13 +41,13 @@ def predict_label_error_fit(true_labels,predicted_data):
 
     # Plot the data
     plt.figure(figsize=(8, 6))
-    plt.scatter(true_labels_sorted, predicted_data_sorted, label='Weight Data Points')
+    plt.scatter(true_labels_sorted, predicted_data_sorted, label='Length Data Points')
     plt.plot(true_labels_sorted, predicted_fit, color='black',linestyle='--', linewidth=4, label=f'Fit line')
     
     # Add RMSE and R^2 values as text in the bottom-right corner
     plt.text(
         x=0.95, y=0.05,  # Coordinates relative to the axis (0.95 = 95% of x, 0.05 = 5% of y)
-        s=f'R² = {r2:.2f}\nRMSE = {rmse:.2f}\nSample Size = {true_labels_sorted.shape[0]}',
+        s=f'R² = {r2:.3f}\nRMSE = {rmse:.3f}\nSample Size = {true_labels_sorted.shape[0]}',
         color='black',
         horizontalalignment='right', verticalalignment='bottom',
         transform=plt.gca().transAxes,  # Use axis coordinates for positioning
@@ -61,7 +61,7 @@ def predict_label_error_fit(true_labels,predicted_data):
     plt.legend()
     plt.grid(linestyle = '--')
     plt.tight_layout()
-    plt.savefig('paper_image/length__noopt_error_eval.png')
+    plt.savefig('paper_image/length_error_eval.png')
     plt.show()
 
 
@@ -396,7 +396,7 @@ class WeightData(Dataset):
 
 # '''
 from torch.utils.data import DataLoader
-data = WeightData(input_path='bbox_area_dataset_no_bbox_optimization.json',label_path='/media/anranli/DATA/data/fish/Growth Study Data 12-2024.xlsx',mode='train')
+data = WeightData(input_path='bbox_area_dataset.json',label_path='/media/anranli/DATA/data/fish/Growth Study Data 12-2024.xlsx',mode='train')
 data.length_summary()
 # data.weight_summary()
 

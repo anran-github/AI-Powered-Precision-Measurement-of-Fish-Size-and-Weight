@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-based Fish Measurement Platform</title>
+    <title>Fish Detector</title>
     <script>
 let imageFiles = [];
 let currentIndex = 0;
@@ -214,34 +214,12 @@ async function calibrate(event) {
     </script>
 </head>
 <body>
-    <h2>AI-based Fish Measurement Platform</h2>
+    <h2>Fish Detector</h2>
 
-    <!-- 📌 Calibration Section -->
-    <h3>Calibration</h3>
-    <input type="file" accept="image/*" id="calibrationFile" onchange="calibrate(event)">
-    <p>Upload a calibration image (with a known reference circle).</p>
-
-    <hr> <!-- Adds a horizontal line for separation -->
-
-    <!-- 📌 Mode and Connection Selection -->
-    <label for="modeSelect">Select Mode:</label>
-    <select id="modeSelect">
-        <option value="real-time">Real-time Mode</option>
-        <option value="offline">Offline Mode</option>
-    </select>
-
-    <br><br>
-
-    <!-- 📌 Select Folder -->
     <input type="file" accept="image/*" webkitdirectory multiple onchange="loadFolder(event)">
     <br><br>
 
     <h3 id="imageName">Current Image: -</h3>
-
-    <!-- 📌 Fish Age Input -->
-    <label for="fishAge">Fish Age (months):</label>
-    <input type="number" id="fishAge" min="1" placeholder="Enter age in months">
-    <br><br>
 
     <div style="display: flex;">
         <canvas id="canvas" style="border: 1px solid black;"></canvas>
@@ -255,11 +233,15 @@ async function calibrate(event) {
         </div>
     </div>
 
-    <!-- 📌 Navigation Buttons -->
     <button onclick="previousImage()">Previous Image</button>
     <button onclick="nextImage()">Next Image</button>
     <button onclick="saveResultsToExcel()">Save Results</button>
     <button onclick="saveResultsAndNext()">Save Results and Next</button>
-</body>
 
+
+    <h3>Calibration</h3>
+    <input type="file" accept="image/*" id="calibrationFile" onchange="calibrate(event)">
+    <p>Upload a calibration image (with a known reference object).</p>
+
+</body>
 </html>

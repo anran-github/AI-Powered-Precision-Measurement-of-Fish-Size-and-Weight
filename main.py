@@ -393,7 +393,7 @@ async def save_results(data: list[dict]):
     df = pd.DataFrame(data)
 
     # Save to Excel (append if file exists)
-    file_name = "detection_results.xlsx"
+    file_name = "measurement_results.xlsx"
     try:
         existing_df = pd.read_excel(file_name)
         df = pd.concat([existing_df, df], ignore_index=True)
