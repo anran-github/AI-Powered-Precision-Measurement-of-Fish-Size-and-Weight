@@ -272,10 +272,6 @@ weight_model.load_state_dict(torch.load('fish_saved_weights/model_epoch80_0.1500
 weight_model.eval()
 print('model loaded')
 
-# ===== In-memory store per session =====
-session_results = {}        # session_id -> list of dicts
-session_calibration = {}    # session_id -> calibration factor
-
 
 # Enable CORS
 app.add_middleware(
@@ -286,48 +282,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Global variable to store calibration factor
-# calibration_factor = None
+calibration_factor = None
 
-# @app.post("/calibrate/")
-# async def calibrate(file: UploadFile = File(...)):
-#     # global calibration_factor
+@app.post("/calibrate/")
+async def calibrate(file: UploadFile = File(...)):
+    global calibration_factor
     
-#     # Read the image
-#     contents = await file.read()
-#     image = Image.open(io.BytesIO(contents))
-#     image = np.array(image)
+    # Read the image
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    image = np.array(image)
 
-#     calibration_factor,out_img = find_coin_diameter(image)
+    calibration_factor,out_img = find_coin_diameter(image)
 
-#     cv2.imshow("Calibration Circle", out_img)
-#     # Wait and close the windows
-#     cv2.waitKey(0)
-#     cv2.destroyAllWindows()
-#     # Fake calibration logic (Replace with actual calibration process)
-#     # reference_object_real_length = 10.0  # cm (example)
-#     # reference_object_pixel_length = image.shape[1] // 4  # Assume detected object width
+    cv2.imshow("Calibration Circle", out_img)
+    # Wait and close the windows
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    # Fake calibration logic (Replace with actual calibration process)
+    # reference_object_real_length = 10.0  # cm (example)
+    # reference_object_pixel_length = image.shape[1] // 4  # Assume detected object width
     
-#     # calibration_factor = reference_object_real_length / reference_object_pixel_length
+    # calibration_factor = reference_object_real_length / reference_object_pixel_length
     
-#     return {"scale_factor": calibration_factor}
+    return {"scale_factor": calibration_factor}
 
 
 @app.post("/calibrate_remote/")
 async def calibrate_remote(
     file: UploadFile = File(...),
-    session_id: str = Form(...),   # <- add session_id
     x: int = Form(...),
     y: int = Form(...),
     w: int = Form(...),
     h: int = Form(...)
 ):
+    """
+    Receives image file + ROI coordinates relative to original image pixels (not the scaled display).
+    Returns JSON: {'scale_factor': float, 'preview': 'data:image/jpeg;base64,...' }
+    """
     contents = await file.read()
     try:
         pil_img = Image.open(io.BytesIO(contents)).convert('RGB')
     except Exception as e:
         return JSONResponse({"error": f"Bad image: {e}"}, status_code=400)
 
-    img_np = np.array(pil_img)
+    img_np = np.array(pil_img)  # RGB
 
     # clamp coords to valid range
     H, W, _ = img_np.shape
@@ -343,28 +342,29 @@ async def calibrate_remote(
     except Exception as e:
         return JSONResponse({"error": f"Calibration failed: {e}"}, status_code=400)
 
-    # Save calibration factor per session
-    session_calibration[session_id] = float(scale_factor)
-
+    # prepare annotated preview (drawn on the crop). If you prefer to annotate on the original image,
+    # you can paste the annotated patch back onto img_np at (x0,y0).
     # Convert annotated_rgb to JPEG base64
     _, buf = cv2.imencode('.jpg', cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR))
     preview_b64 = base64.b64encode(buf).decode('ascii')
     preview_data = f"data:image/jpeg;base64,{preview_b64}"
 
+    # store the calibration factor in the global var if you want to keep state
+    global calibration_factor
+    calibration_factor = scale_factor
+
     return {"scale_factor": float(scale_factor), "preview": preview_data}
 
 
-
-
 @app.post("/detect/")
-async def detect(file: UploadFile = File(...), session_id: str = Form(...)):
-    contents = await file.read()
-    image = np.array(Image.open(io.BytesIO(contents)))
+async def detect(file: UploadFile = File(...)):
+    # Read the image
+    res = []
+    global calibration_factor
 
-    # Use calibration factor for this session
-    if session_id not in session_calibration:
-        return JSONResponse({"error": "Calibration not set for this session."}, status_code=400)
-    calibration_factor = session_calibration[session_id]
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    image = np.array(image)
 
     # Fake object detection logic (Replace with real detection)
     h, w, _ = image.shape
@@ -487,6 +487,26 @@ async def detect(file: UploadFile = File(...), session_id: str = Form(...)):
             "fish_mass": 0
         }
     
+
+@app.post("/save_results/")
+async def save_results(data: list[dict]):
+    df = pd.DataFrame(data)
+
+    # Save to Excel (append if file exists)
+    file_name = "measurement_results.xlsx"
+    try:
+        existing_df = pd.read_excel(file_name)
+        df = pd.concat([existing_df, df], ignore_index=True)
+    except FileNotFoundError:
+        pass  # No existing file, create a new one
+
+    df.to_excel(file_name, index=False)
+    return {"message": "Results saved successfully"}
+
+
+# ===== In-memory store per session =====
+session_results = {}        # session_id -> list of dicts
+session_calibration = {}    # session_id -> calibration factor
 
 @app.post("/save_results_session/")
 async def save_results_session(data: list[dict], session_id: str = Query(...)):

@@ -13,33 +13,8 @@
     #calibPreview { max-width: 320px; display:block; margin-top:8px; border:1px solid #ccc; }
     .btn { padding:8px 12px; cursor:pointer; border-radius:6px; border:1px solid #888; background:#f7f7f7; }
     .btn-primary { background:#2b7cff; color:white; border-color:#1b5fd6; }
-
-    /* Popup modal styles */
-    #popup {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.6);
-      justify-content: center;
-      align-items: center;
-    }
-    #popupContent {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 90%;
-      max-height: 90%;
-      overflow: auto;
-    }
-    #popupContent img {
-      max-width: 100%;
-      max-height: 80vh;
-    }
   </style>
 </head>
-
 <body>
   <h2>AI-based Fish Measurement Platform</h2>
 
@@ -72,8 +47,7 @@
         <button class="btn" onclick="previousImage()">Previous Image</button>
         <button class="btn" onclick="nextImage()">Next Image</button>
         <button class="btn btn-primary" onclick="saveResultsAndNext()">Save & Next</button>
-        <!-- <button class="btn" onclick="saveResultsToExcel()">Save All Results</button> -->
-        <button class="btn" onclick="downloadResults()">Download All Results</button>
+        <button class="btn" onclick="saveResultsToExcel()">Save All Results</button>
       </div>
     </div>
 
@@ -88,22 +62,12 @@
       <h3>Calibration</h3>
       <p class="small">When calibrating: draw a rectangle around the reference coin (mouse or touch), then press <b>Confirm Calibration</b>.</p>
       <p id="calibStatus">Calibration: not set</p>
-    </div>
-  </div>
-
-  <!-- Popup Modal -->
-  <div id="popup">
-    <div id="popupContent">
-      <h3>Calibration Result</h3>
-      <img id="popupImage" src="" alt="Calibration result">
-      <br><br>
-      <button class="btn btn-primary" onclick="closePopup()">Close</button>
+      <img id="calibPreview" alt="Calibration preview" />
     </div>
   </div>
 
 <script>
 /* ---- Globals ---- */
-let sessionId = crypto.randomUUID();  // unique per page load
 let imageFiles = [];
 let currentIndex = 0;
 let allDetections = [];          // accumulate results for saving
@@ -174,23 +138,18 @@ function loadFolder(event) {
 }
 function nextImage() {
   if (currentIndex < imageFiles.length - 1) {
-    clearDetections();
     currentIndex++;
     showImageFileOnCanvas(imageFiles[currentIndex], true);
-    document.getElementById('imageName').innerText = 
-      `Current Image: ${imageFiles[currentIndex].name}`;
+    document.getElementById('imageName').innerText = `Current Image: ${imageFiles[currentIndex].name}`;
   } else {
     alert('You have reached the last image.');
   }
 }
-
 function previousImage() {
   if (currentIndex > 0) {
-    clearDetections();
     currentIndex--;
     showImageFileOnCanvas(imageFiles[currentIndex], true);
-    document.getElementById('imageName').innerText = 
-      `Current Image: ${imageFiles[currentIndex].name}`;
+    document.getElementById('imageName').innerText = `Current Image: ${imageFiles[currentIndex].name}`;
   } else {
     alert('You are at the first image.');
   }
@@ -234,10 +193,9 @@ async function sendImageToAPI() {
   if (!displayFile) return;
   const form = new FormData();
   form.append('file', displayFile);
-  form.append("session_id", sessionId);
 
   try {
-    const resp = await fetch(` https://wrote-storage-trained-norman.trycloudflare.com/detect/?session_id=${sessionId}`, { method: 'POST', body: form });
+    const resp = await fetch('http://127.0.0.1:8000/detect/', { method: 'POST', body: form });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const result = await resp.json();
 
@@ -275,7 +233,7 @@ async function sendImageToAPI() {
 async function saveResultsToExcel() {
   if (allDetections.length === 0) { alert('No data to save.'); return; }
   try {
-    const resp = await fetch(' https://wrote-storage-trained-norman.trycloudflare.com/save_results/', {
+    const resp = await fetch('http://127.0.0.1:8000/save_results/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(allDetections)
@@ -287,44 +245,14 @@ async function saveResultsToExcel() {
     alert('Save failed: ' + err.message);
   }
 }
-
-
-function saveResults() {
-  fetch(` https://wrote-storage-trained-norman.trycloudflare.com/save_results_session/?session_id=${sessionId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(allDetections)
-  }).then(res => res.json())
-    .then(data => console.log(data))
-    .catch(err => console.error(err));
-}
-
-function downloadResults() {
-  fetch(` https://wrote-storage-trained-norman.trycloudflare.com/download_results_session/?session_id=${sessionId}`)
-    .then(resp => {
-      if (!resp.ok) throw new Error("No results for this session.");
-      return resp.blob();
-    })
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "measurement_results.xlsx";
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert(err));
-}
-
 async function saveResultsAndNext() {
   if (allDetections.length === 0) { alert('No data to save.'); return; }
   try {
-    // await fetch(' https://wrote-storage-trained-norman.trycloudflare.com/save_results/', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(allDetections)
-    // });
-    saveResults();
+    await fetch('http://127.0.0.1:8000/save_results/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(allDetections)
+    });
     // clear stored detections if you want after saving (optional)
     allDetections = [];
     nextImage();
@@ -436,14 +364,17 @@ canvas.addEventListener('touchend', (e) => {
 /* ---- Confirm calibration: send file + ROI to server ---- */
 async function confirmCalibration() {
   if (!hasROI) { alert('Draw a rectangle around the reference coin first.'); return; }
+  // choose which file is used for calibration: displayFile (current) or the calibrationFile previously uploaded (displayFile is set in both flows)
   if (!displayFile) { alert('No image available to send.'); return; }
 
+  // canvas coords -> original image pixel coords
   const x_canvas = Math.round(Math.min(startX, curX));
   const y_canvas = Math.round(Math.min(startY, curY));
   const w_canvas = Math.round(Math.abs(curX - startX));
   const h_canvas = Math.round(Math.abs(curY - startY));
   if (w_canvas <= 0 || h_canvas <= 0) { alert('Invalid ROI.'); return; }
 
+  // map to original image pixels:
   const origScaleX = displayImg.naturalWidth / canvas.width;
   const origScaleY = displayImg.naturalHeight / canvas.height;
   const x_orig = Math.max(0, Math.round(x_canvas * origScaleX));
@@ -451,9 +382,9 @@ async function confirmCalibration() {
   const w_orig = Math.max(1, Math.round(w_canvas * origScaleX));
   const h_orig = Math.max(1, Math.round(h_canvas * origScaleY));
 
+  // prepare request
   const form = new FormData();
   form.append('file', displayFile);
-  form.append('session_id', sessionId);
   form.append('x', String(x_orig));
   form.append('y', String(y_orig));
   form.append('w', String(w_orig));
@@ -463,7 +394,7 @@ async function confirmCalibration() {
   document.getElementById('confirmCalibBtn').disabled = true;
 
   try {
-    const resp = await fetch(` https://wrote-storage-trained-norman.trycloudflare.com/calibrate_remote/?session_id=${sessionId}`, { method: 'POST', body: form });
+    const resp = await fetch('http://127.0.0.1:8000/calibrate_remote/', { method: 'POST', body: form });
     if (!resp.ok) {
       const txt = await resp.text();
       throw new Error(txt || `HTTP ${resp.status}`);
@@ -471,41 +402,24 @@ async function confirmCalibration() {
     const j = await resp.json();
     calibrationFactor = j.scale_factor;
     document.getElementById('calibStatus').innerText = `Calibration set: ${calibrationFactor.toFixed(6)} cm/pixel`;
-
     if (j.preview) {
-      // still update the sidebar preview if needed
-      // document.getElementById('calibPreview').src = j.preview;
-
-      // show popup once
-      document.getElementById('popupImage').src = j.preview;
-      document.getElementById('popup').style.display = 'flex';
+      document.getElementById('calibPreview').src = j.preview;
     }
-
+    // exit calibration mode
     calibrationMode = false;
     hasROI = false;
     document.getElementById('cancelCalibBtn').disabled = true;
     document.getElementById('confirmCalibBtn').disabled = true;
 
+    // Optionally re-run detection on this image now that calibration is set
     await sendImageToAPI();
+
   } catch (err) {
     console.error('Calibration error:', err);
     alert('Calibration failed: ' + err.message);
     document.getElementById('calibStatus').innerText = 'Calibration failed';
     document.getElementById('confirmCalibBtn').disabled = false;
   }
-}
-
-/* ---- Popup control ---- */
-function closePopup() {
-  document.getElementById('popup').style.display = 'none';
-}
-
-function clearDetections() {
-  // reset detection state
-  currentBBox = null;
-
-  // clear canvas and redraw image (without any bbox)
-  redrawCanvas();
 }
 
 /* ---- Initialization: blank canvas ---- */

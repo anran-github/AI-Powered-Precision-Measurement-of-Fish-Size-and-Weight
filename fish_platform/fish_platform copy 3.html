@@ -237,7 +237,7 @@ async function sendImageToAPI() {
   form.append("session_id", sessionId);
 
   try {
-    const resp = await fetch(` https://wrote-storage-trained-norman.trycloudflare.com/detect/?session_id=${sessionId}`, { method: 'POST', body: form });
+    const resp = await fetch(`http://127.0.0.1:8000/detect/?session_id=${sessionId}`, { method: 'POST', body: form });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const result = await resp.json();
 
@@ -275,7 +275,7 @@ async function sendImageToAPI() {
 async function saveResultsToExcel() {
   if (allDetections.length === 0) { alert('No data to save.'); return; }
   try {
-    const resp = await fetch(' https://wrote-storage-trained-norman.trycloudflare.com/save_results/', {
+    const resp = await fetch('http://127.0.0.1:8000/save_results/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(allDetections)
@@ -290,7 +290,7 @@ async function saveResultsToExcel() {
 
 
 function saveResults() {
-  fetch(` https://wrote-storage-trained-norman.trycloudflare.com/save_results_session/?session_id=${sessionId}`, {
+  fetch(`http://localhost:8000/save_results_session/?session_id=${sessionId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(allDetections)
@@ -300,7 +300,7 @@ function saveResults() {
 }
 
 function downloadResults() {
-  fetch(` https://wrote-storage-trained-norman.trycloudflare.com/download_results_session/?session_id=${sessionId}`)
+  fetch(`http://localhost:8000/download_results_session/?session_id=${sessionId}`)
     .then(resp => {
       if (!resp.ok) throw new Error("No results for this session.");
       return resp.blob();
@@ -319,7 +319,7 @@ function downloadResults() {
 async function saveResultsAndNext() {
   if (allDetections.length === 0) { alert('No data to save.'); return; }
   try {
-    // await fetch(' https://wrote-storage-trained-norman.trycloudflare.com/save_results/', {
+    // await fetch('http://127.0.0.1:8000/save_results/', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
     //   body: JSON.stringify(allDetections)
@@ -463,7 +463,7 @@ async function confirmCalibration() {
   document.getElementById('confirmCalibBtn').disabled = true;
 
   try {
-    const resp = await fetch(` https://wrote-storage-trained-norman.trycloudflare.com/calibrate_remote/?session_id=${sessionId}`, { method: 'POST', body: form });
+    const resp = await fetch(`http://127.0.0.1:8000/calibrate_remote/?session_id=${sessionId}`, { method: 'POST', body: form });
     if (!resp.ok) {
       const txt = await resp.text();
       throw new Error(txt || `HTTP ${resp.status}`);

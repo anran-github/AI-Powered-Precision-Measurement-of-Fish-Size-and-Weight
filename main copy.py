@@ -1,14 +1,5 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-
-from fastapi import Form
-from fastapi.responses import HTMLResponse, JSONResponse
-import base64
-from fastapi import Query
-import uuid
-
-
 import cv2
 import numpy as np
 import pandas as pd
@@ -34,49 +25,6 @@ from models.face_detector.inference import YOLOInference as FaceInference
 app = FastAPI()
 
 # calibration process
-def find_coin_diameter_from_crop(crop_rgb):
-    """
-    crop_rgb: numpy array in RGB (HxWx3). Returns (scale_cm_per_pixel, annotated_rgb_image).
-    Uses your previous processing but WITHOUT calling selectROI or imshow.
-    """
-    # convert RGB->BGR for OpenCV ops (if crop is RGB)
-    img = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR)
-
-    # image enhancement / denoising
-    img = cv2.convertScaleAbs(img, alpha=1.5, beta=30)
-    img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    edges = cv2.Canny(blurred, 20, 250)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if not contours:
-        raise ValueError("No contours found in the provided crop. Try a larger crop or better lighting.")
-
-    # find largest contour and min enclosing circle
-    largest_contour = max(contours, key=cv2.contourArea)
-    (x, y), radius = cv2.minEnclosingCircle(largest_contour)
-    diameter_px = 2.0 * radius
-    if diameter_px <= 0.0:
-        raise ValueError("Detected diameter is zero or negative.")
-
-    # annotated image (draw contour + circle)
-    annotated = img.copy()
-    cv2.drawContours(annotated, [largest_contour], -1, (0, 255, 0), 2)
-    center = (int(round(x)), int(round(y)))
-    cv2.circle(annotated, center, int(round(radius)), (0, 0, 255), 2)  # circle in red
-
-    # convert annotated to RGB for returning
-    annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-
-    # coin real diameter in cm (your code used 1.27 cm)
-    coin_cm = 1.27
-    cm_per_pixel = coin_cm / diameter_px
-
-    return cm_per_pixel, annotated_rgb
-
-
 
 def crop_selected_img(image):
     '''
@@ -272,10 +220,6 @@ weight_model.load_state_dict(torch.load('fish_saved_weights/model_epoch80_0.1500
 weight_model.eval()
 print('model loaded')
 
-# ===== In-memory store per session =====
-session_results = {}        # session_id -> list of dicts
-session_calibration = {}    # session_id -> calibration factor
-
 
 # Enable CORS
 app.add_middleware(
@@ -286,85 +230,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Global variable to store calibration factor
-# calibration_factor = None
+calibration_factor = None
 
-# @app.post("/calibrate/")
-# async def calibrate(file: UploadFile = File(...)):
-#     # global calibration_factor
+@app.post("/calibrate/")
+async def calibrate(file: UploadFile = File(...)):
+    global calibration_factor
     
-#     # Read the image
-#     contents = await file.read()
-#     image = Image.open(io.BytesIO(contents))
-#     image = np.array(image)
-
-#     calibration_factor,out_img = find_coin_diameter(image)
-
-#     cv2.imshow("Calibration Circle", out_img)
-#     # Wait and close the windows
-#     cv2.waitKey(0)
-#     cv2.destroyAllWindows()
-#     # Fake calibration logic (Replace with actual calibration process)
-#     # reference_object_real_length = 10.0  # cm (example)
-#     # reference_object_pixel_length = image.shape[1] // 4  # Assume detected object width
-    
-#     # calibration_factor = reference_object_real_length / reference_object_pixel_length
-    
-#     return {"scale_factor": calibration_factor}
-
-
-@app.post("/calibrate_remote/")
-async def calibrate_remote(
-    file: UploadFile = File(...),
-    session_id: str = Form(...),   # <- add session_id
-    x: int = Form(...),
-    y: int = Form(...),
-    w: int = Form(...),
-    h: int = Form(...)
-):
+    # Read the image
     contents = await file.read()
-    try:
-        pil_img = Image.open(io.BytesIO(contents)).convert('RGB')
-    except Exception as e:
-        return JSONResponse({"error": f"Bad image: {e}"}, status_code=400)
+    image = Image.open(io.BytesIO(contents))
+    image = np.array(image)
 
-    img_np = np.array(pil_img)
+    calibration_factor,out_img = find_coin_diameter(image)
 
-    # clamp coords to valid range
-    H, W, _ = img_np.shape
-    x0 = max(0, min(W-1, x))
-    y0 = max(0, min(H-1, y))
-    w = max(1, min(W - x0, w))
-    h = max(1, min(H - y0, h))
-
-    crop = img_np[y0:y0+h, x0:x0+w]
-
-    try:
-        scale_factor, annotated_rgb = find_coin_diameter_from_crop(crop)
-    except Exception as e:
-        return JSONResponse({"error": f"Calibration failed: {e}"}, status_code=400)
-
-    # Save calibration factor per session
-    session_calibration[session_id] = float(scale_factor)
-
-    # Convert annotated_rgb to JPEG base64
-    _, buf = cv2.imencode('.jpg', cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR))
-    preview_b64 = base64.b64encode(buf).decode('ascii')
-    preview_data = f"data:image/jpeg;base64,{preview_b64}"
-
-    return {"scale_factor": float(scale_factor), "preview": preview_data}
-
-
+    cv2.imshow("Calibration Circle", out_img)
+    # Wait and close the windows
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    # Fake calibration logic (Replace with actual calibration process)
+    # reference_object_real_length = 10.0  # cm (example)
+    # reference_object_pixel_length = image.shape[1] // 4  # Assume detected object width
+    
+    # calibration_factor = reference_object_real_length / reference_object_pixel_length
+    
+    return {"scale_factor": calibration_factor}
 
 
 @app.post("/detect/")
-async def detect(file: UploadFile = File(...), session_id: str = Form(...)):
-    contents = await file.read()
-    image = np.array(Image.open(io.BytesIO(contents)))
+async def detect(file: UploadFile = File(...)):
+    # Read the image
+    res = []
+    global calibration_factor
 
-    # Use calibration factor for this session
-    if session_id not in session_calibration:
-        return JSONResponse({"error": "Calibration not set for this session."}, status_code=400)
-    calibration_factor = session_calibration[session_id]
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    image = np.array(image)
 
     # Fake object detection logic (Replace with real detection)
     h, w, _ = image.shape
@@ -488,42 +388,17 @@ async def detect(file: UploadFile = File(...), session_id: str = Form(...)):
         }
     
 
-@app.post("/save_results_session/")
-async def save_results_session(data: list[dict], session_id: str = Query(...)):
-    """
-    Store results in memory per session.
-    """
-    if session_id not in session_results:
-        session_results[session_id] = []
-    session_results[session_id].extend(data)
-    return {"message": "Results stored for this session"}
+@app.post("/save_results/")
+async def save_results(data: list[dict]):
+    df = pd.DataFrame(data)
 
-
-@app.get("/download_results_session/")
-async def download_results_session(session_id: str = Query(...)):
-    if session_id not in session_results or len(session_results[session_id]) == 0:
-        return JSONResponse({"error": "No results for this session."}, status_code=404)
-
-    df = pd.DataFrame(session_results[session_id])
-
-    file_path = f"temp_results_{session_id}.xlsx"
-    df.to_excel(file_path, index=False)
-
-    return FileResponse(
-        path=file_path,
-        filename="measurement_results.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-@app.get("/download_results/")
-async def download_results():
+    # Save to Excel (append if file exists)
     file_name = "measurement_results.xlsx"
-    if not os.path.exists(file_name):
-        return JSONResponse({"error": "No results available yet."}, status_code=404)
+    try:
+        existing_df = pd.read_excel(file_name)
+        df = pd.concat([existing_df, df], ignore_index=True)
+    except FileNotFoundError:
+        pass  # No existing file, create a new one
 
-    return FileResponse(
-        path=file_name,
-        filename=file_name,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    df.to_excel(file_name, index=False)
+    return {"message": "Results saved successfully"}

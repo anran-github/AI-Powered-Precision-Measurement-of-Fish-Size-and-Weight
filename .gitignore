@@ -158,3 +158,5 @@ cython_debug/
 models/*
 # fish_saved_weights
 helper/*
+
+try.py

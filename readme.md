@@ -7,9 +7,15 @@ This is the source code of the paper:
 We provide an auto AI-based fish size and weight estimation platform to speed up fish parameter measurements.
 
 ## Usage
-Ensure all packages are installed in requirements.txt:
+Use Cloudflared make service public:
 
-    pip install -r requirements.txt
+    cloudflared tunnel --url http://127.0.0.1:8000
+
+![Demo Image](cloudflared.png "Cloudflared Demo Image")
+
+Remember the API link above.
+
+This way, your API services are open to everyone.
 
 ### Run proposed fish measurement platform:
 Start Python API:
@@ -20,12 +26,16 @@ Start Python API:
 
         python -m uvicorn main:app --reload
 
-Open platform with your browser:
+
+**Change API link based on Cloudflared provided in the Web file:**
 
     fish_platform/fish_platform.html
 
+Open above web with your browser.
 <!-- Overall Process in the paper:
 <img src="paper_image/Screenshot from 2025-02-17 12-34-17.png"> -->
+
+![Platform Image](New_platform.png "Platform Screenshot")
 
 Currently, we only provide weight NN model training/testing codes. See fish_*.py files with relevant names.
 
@@ -72,7 +82,7 @@ XGBoost:
 ![alt text](XGBoost_result.png "Title")
 
 
-## Platform 
+## Platform (Previous Version)
 Build with Python API and JavaScript.
 
 <img src="paper_image/Screenshot from 2025-02-11 15-12-15.png" >
