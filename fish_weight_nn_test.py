@@ -71,7 +71,7 @@ def predict_label_error_fit(true_labels,predicted_data):
 
 
 # CHECK GPU/CPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
 print(f"\n Using device: {device}")
 
@@ -134,7 +134,7 @@ def test_barplot(model, test_loader,epoch):
             # print(outputs[:20,:].T)
             # print(targets[:20])
             # print(loss)
-            if not 'cuda' in device.type:
+            if not "cuda:0" in device.type:
                 loss_set.append(loss.item())
                 test_loss += loss.item() * inputs.size(0)
             else:
@@ -217,7 +217,7 @@ def test_paper_plot(model, test_loader,epoch):
             # print(outputs[:20,:].T)
             # print(targets[:20])
             # print(loss)
-            if not 'cuda' in device.type:
+            if not "cuda:0" in device.type:
                 loss_set.append(loss.item())
                 test_loss += loss.item() * inputs.size(0)
             else:

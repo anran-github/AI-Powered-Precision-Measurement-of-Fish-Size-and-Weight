@@ -45,7 +45,7 @@ train:
     epoch: 4000
     warmup_steps: 500
     opt_level: 'O2'
-device: 'cuda'
+device: "cuda:0"
 
 ```
 

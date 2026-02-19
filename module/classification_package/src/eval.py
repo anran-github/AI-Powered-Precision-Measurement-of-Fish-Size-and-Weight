@@ -29,7 +29,7 @@ def pairwise_distance(x, y):
     
     return distances
 
-def get_embeddings(model, dataset, device = 'cuda', metrics = ['acc'] , batch_size = 128):
+def get_embeddings(model, dataset, device = "cuda:0", metrics = ['acc'] , batch_size = 128):
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     dump = dump_embeddings(data_loader, model, device = device, metrics = metrics)
     if metrics[0] == 'at_k':

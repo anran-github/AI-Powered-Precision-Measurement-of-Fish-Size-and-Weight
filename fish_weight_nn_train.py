@@ -15,7 +15,7 @@ from fish_weight_model import WeightNet, WeightNet_CPR
 
 
 # CHECK GPU/CPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
 print(f"\n Using device: {device}")
 
@@ -81,7 +81,7 @@ def test(model, test_loader,epoch):
             # print(outputs[:20,:].T)
             # print(targets[:20])
             # print(loss)
-            if not 'cuda' in device.type:
+            if not "cuda:0" in device.type:
                 loss_set.append(loss.item())
                 test_loss += loss.item() * inputs.size(0)
             else:

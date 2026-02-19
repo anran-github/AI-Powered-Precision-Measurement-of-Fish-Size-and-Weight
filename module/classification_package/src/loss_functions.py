@@ -353,7 +353,7 @@ def TripletSemiHardLoss(y_true, y_pred, device, margin=10.0):
 class TripletLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.device = 'cuda'
+        self.device = "cuda:0"
 
     def forward(self, embeddings, labels, **kwargs):
         return TripletSemiHardLoss(labels, embeddings, self.device)

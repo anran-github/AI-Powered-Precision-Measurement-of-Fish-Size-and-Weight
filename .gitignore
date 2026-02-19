@@ -155,8 +155,12 @@ cython_debug/
 /data/
 /data/cache/
 
-models/*
+
 # fish_saved_weights
 helper/*
 
 try.py
+*.mp4
+
+# detection and segmentation weights
+models/*
