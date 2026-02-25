@@ -3,7 +3,12 @@ import numpy as np
 import torch
 import copy
 from PIL import Image
+import os
+from time import time
+from tqdm import tqdm
+import pandas as pd
 
+from fish_weight_model import WeightNet
 from models.detection.inference import YOLOInference
 from models.segmentation.inference import Inference
 
@@ -11,14 +16,23 @@ from models.segmentation.inference import Inference
 # USER PARAMETERS
 # ---------------------------------------------------------
 DETECTION_THRESHOLD = 0.7
+RATIO_WH            = 4
+AREA_THRESHOLD      = 400*100
 PRINT_DEBUG = False
 
-TILE_SIZE = 640
+TILE_SIZE    = 640
 TILE_OVERLAP = 0.3        # 30% overlap – required for small-object detection
 
 # ---------------------------------------------------------
 # Load your models
 # ---------------------------------------------------------
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+weight_model = WeightNet().to(device)
+
+weight_model.load_state_dict(torch.load('fish_saved_weights/model_epoch80_0.15009590983390808.pth'))
+weight_model.eval()
+print('Weight model loaded')
+
 detector = YOLOInference(
     "models/detection/model.ts",
     imsz=(TILE_SIZE, TILE_SIZE),   # important: inference on tiles
@@ -33,111 +47,106 @@ segmentator = Inference(
 )
 
 
-
-class FishDetector:
+class ContourDetector:
     def __init__(self):
         self.image = None
-        self.annotated_image = None
-        self.calib_lines = []
 
     def obj_segmentation(self, image):
+        """
+        Detect contours from image
+        Return: [[x,y,w,h], ...]
+        """
         self.image = image
         if self.image is None:
             print("Error: Could not load image.")
-            return
+            return None, None
 
         mm_per_px = self.compute_mm_per_px()
         if mm_per_px is None:
-            return
+            return None, None
 
         img = self.image.copy()
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        lower_red1 = np.array([0, 22, 12])
-        upper_red1 = np.array([152, 255, 255])
-        lower_red2 = np.array([100, 22, 12])
-        upper_red2 = np.array([255, 255, 255])
+        # ==========================================
+        # 1. Convert to grayscale
+        # ==========================================
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
-        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-        mask = cv2.bitwise_or(mask1, mask2)
+        # ==========================================
+        # 2. Blur slightly to suppress noise
+        # ==========================================
+        gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-        k_size = 5
-        kernel = np.ones((k_size, k_size), np.uint8)
-        mask_clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_size, k_size))
-        opened_edges = cv2.morphologyEx(mask_clean, cv2.MORPH_CLOSE, kernel)
+        # ==========================================
+        # 3. Adaptive threshold (better for small objects)
+        # Fish are darker than background → invert threshold
+        # ==========================================
+        binary = cv2.adaptiveThreshold(
+            gray_blur,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,
+            51,   # block size (must be odd)
+            2
+        )
 
-        contours, _ = cv2.findContours(opened_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # ==========================================
+        # 4. Morphological operations
+        # Make small fish more solid
+        # ==========================================
+        kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small, iterations=2)
+
+        kernel_big = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        binary = cv2.dilate(binary, kernel_big, iterations=1)
+
+        # ==========================================
+        # 5. Find contours
+        # ==========================================
+        contours, _ = cv2.findContours(
+            binary,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
 
         filtered_contours = []
-        min_contour_area = 7  # Adjust this value
+
+        # Lower this a lot to ensure small fish are kept
+        min_contour_area_mm2 = 7  # was 7, too large
+        min_contour_area_px = min_contour_area_mm2 / (mm_per_px ** 2)
+
         for contour in contours:
-            if cv2.contourArea(contour) * (mm_per_px ** 2) > min_contour_area:
+            if cv2.contourArea(contour) > min_contour_area_px:
                 filtered_contours.append(contour)
 
-        results = []
-        annotated = img.copy()
-        output_dir = "cropped_regions"
-        os.makedirs(output_dir, exist_ok=True)
+        tiles = []
+        coords = []
 
-        for i, cnt in enumerate(filtered_contours):
-            area_px = cv2.contourArea(cnt)
-            area_mm2 = area_px * (mm_per_px ** 2)
-
-            # === Compute bounding rectangle ===
+        # ==========================================
+        # 6. Bounding boxes
+        # ==========================================
+        for cnt in filtered_contours:
             x, y, w, h = cv2.boundingRect(cnt)
-            cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            # === Crop and save ===
-            cropped = img[y:y + h, x:x + w]
-            crop_filename = os.path.join(output_dir, f"region_{i}.png")
-            cv2.imwrite(crop_filename, cropped)
-            print(f"Saved: {crop_filename}")
+            # Expand bounding box slightly (important!)
+            pad = 5
+            x1 = max(x - pad, 0)
+            y1 = max(y - pad, 0)
+            x2 = min(x + w + pad, img.shape[1])
+            y2 = min(y + h + pad, img.shape[0])
 
-            # Label info on annotated image
-            M = cv2.moments(cnt)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                cv2.putText(annotated, f"{area_mm2:.2f}", (cx - 100, cy),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cropped = img[y1:y2, x1:x2]
 
-            results.append({
-                "index": i,
-                "area_px": area_px,
-                "area_mm2": area_mm2,
-                "bbox": (x, y, w, h),
-                "crop_path": crop_filename
-            })
+            tiles.append(cropped)
+            coords.append([x1, y1])
 
-        txt = f"mm/px (averaged): {mm_per_px:.6f} mm/px\n"
-        txt += f"Calibration lines: {len(self.calib_lines)}\n\n"
-
-        if results:
-            txt += "Detected objects:\n"
-            for r in results:
-                txt += f"  #{r['index']}: {r['area_px']:.1f} px^2 -> {r['area_mm2']:.3f} mm^2\n"
-        else:
-            txt += "No contours detected.\n"
-
-        print(txt)
-
-        # Display annotated image
-        annotated = cv2.resize(annotated, (0, 0), fx=0.5, fy=0.5)
-        cv2.imshow("Annotated Image", annotated)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        return tiles, coords
 
     def compute_mm_per_px(self):
         return 0.1
 
 
 
-
-# ---------------------------------------------------------
-# Helper: tile the frame into overlapping patches
-# ---------------------------------------------------------
 def tile_image(img, tile_size=640, overlap=0.3):
 
     H, W, _ = img.shape
@@ -157,7 +166,6 @@ def tile_image(img, tile_size=640, overlap=0.3):
             coords.append((x, y))
 
     return tiles, coords
-
 
 
 # ---------------------------------------------------------
@@ -242,7 +250,56 @@ def get_fish_size_and_box(full_img_rgb, box):
     length = max(h1, w1)
     height = min(h1, w1)
 
-    return length, height, box_pts
+    return length, height, box_pts, segmented_polygons.to_dict()['area']
+
+
+
+# calibration process
+def find_coin_diameter_from_crop(crop_rgb,detected_save_path):
+    """
+    crop_rgb: numpy array in RGB (HxWx3). Returns (scale_cm_per_pixel, annotated_rgb_image).
+    Uses your previous processing but WITHOUT calling selectROI or imshow.
+    """
+    # convert RGB->BGR for OpenCV ops (if crop is RGB)
+    img = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR)
+
+    # image enhancement / denoising
+    img = cv2.convertScaleAbs(img, alpha=1.5, beta=30)
+    img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    edges = cv2.Canny(blurred, 20, 250)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        raise ValueError("No contours found in the provided crop. Try a larger crop or better lighting.")
+
+    # find largest contour and min enclosing circle
+    largest_contour = max(contours, key=cv2.contourArea)
+    (x, y), radius = cv2.minEnclosingCircle(largest_contour)
+    diameter_px = 2.0 * radius
+    if diameter_px <= 0.0:
+        raise ValueError("Detected diameter is zero or negative.")
+
+    # annotated image (draw contour + circle)
+    annotated = img.copy()
+    cv2.drawContours(annotated, [largest_contour], -1, (0, 255, 0), 2)
+    center = (int(round(x)), int(round(y)))
+    cv2.circle(annotated, center, int(round(radius)), (0, 0, 255), 2)  # circle in red
+
+    # convert annotated to RGB for returning
+    annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+    cv2.imwrite(detected_save_path,annotated_rgb)
+
+    # cv2.imshow('res',annotated_rgb)
+    # cv2.waitKey(0)
+
+    # coin real diameter in cm (your code used 1.27 cm)
+    coin_cm = 1.27
+    cm_per_pixel = coin_cm / diameter_px
+
+    return cm_per_pixel, True
 
 
 
@@ -257,9 +314,16 @@ def process_video(video_path, output_path=None):
 
     writer = None
     first_frame_written = False
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    # 1. Define your starting frame (0-indexed)
+    start_frame = 0 
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
-    while True:
+    # flag for blue-dot: real-size correction
+    REAL_SIZE_FOUND = False 
+    weight_model_input = []
+    for i in tqdm(range(start_frame,total_frames), desc="Rendering", unit="fps"):
         ret, frame_bgr = cap.read()
         if not ret:
             break
@@ -279,9 +343,13 @@ def process_video(video_path, output_path=None):
             first_frame_written = True
         
 
+        # Search For Real Size
+        if not REAL_SIZE_FOUND:
+            calibration_factor, REAL_SIZE_FOUND = find_coin_diameter_from_crop(frame_rgb,video_path.split('/')[-1].replace('.MOV','.png'))
         # -------------------------------------------
         # 1. Tile the large frame
         # -------------------------------------------
+        # tiles, coords = ContourDetector().obj_segmentation(frame_bgr)
         tiles, coords = tile_image(frame_rgb, TILE_SIZE, TILE_OVERLAP)
 
         all_detects = []
@@ -289,12 +357,13 @@ def process_video(video_path, output_path=None):
         # -------------------------------------------
         # 2. Detect in each tile
         # -------------------------------------------
-        for tile, (tx, ty) in zip(tiles, coords):
-
-            dets = detector.predict(tile)[0]   # detect in tile
+        dets = detector.predict(tiles)
+        for det, (tx, ty) in zip(dets, coords):
+            if len(det)==0:
+                continue
 
             # shift tile detections back to global coordinates
-            dets_shifted = shift_boxes(dets, tx, ty)
+            dets_shifted = shift_boxes(det, tx, ty)
             all_detects.extend(dets_shifted)
 
         # -------------------------------------------
@@ -306,38 +375,68 @@ def process_video(video_path, output_path=None):
         # 4. Process all remaining detections
         # -------------------------------------------
         for box in detections:
-
+            
+            # consider score large than threshold
             conf = box.score
             if conf < DETECTION_THRESHOLD:
                 continue
 
             # segmentation + rotated bounding box
-            L, H, box_pts = get_fish_size_and_box(frame_rgb, box)
-            if box_pts is None:
+            L, H, box_pts, area_pixels = get_fish_size_and_box(frame_rgb, box)
+            ratio_hw = L/H
+            # get rid of unfair wh ratio and big areas.
+            if box_pts is None or ratio_hw<RATIO_WH or L*H>AREA_THRESHOLD:
                 continue
 
+            weight_model_input.append(np.array([L* calibration_factor, H* calibration_factor, area_pixels* calibration_factor**2]))
+            
             # draw rotated box
-            cv2.polylines(frame_bgr, [box_pts], True, (0,0,255), 2)
+            if writer is not None:
+                cv2.polylines(frame_bgr, [box_pts], True, (0,0,255), 2)
 
-            x, y = box_pts[0]
-            text = f"{L:.1f} x {H:.1f} (conf {conf:.2f})"
-            cv2.putText(frame_bgr, text, (x, y-10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+                x, y = box_pts[0]
+                text = f"{L:.1f} x {H:.1f} (conf {conf:.2f})"
+                cv2.putText(frame_bgr, text, (x, y-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
 
         # -------------------------------------------
         # 5. Display & save
         # -------------------------------------------
-        cv2.imshow("Fish Detection", frame_bgr)
+        # cv2.imshow("Fish Detection", frame_bgr)
         if writer is not None:
             writer.write(frame_bgr)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+    # -------------------------------------------
+    # Weight Estimation
+    # -------------------------------------------
+    if REAL_SIZE_FOUND:
+        input_data = np.stack(weight_model_input,axis=0)
+
+        # predict weight:
+        with torch.no_grad():
+            input_data = torch.tensor(input_data, dtype=torch.float32).to(device)
+            # input_data = torch.tensor([6.642561445470936, 1.5305083096582157, 6.966261551986847]).to(device).float().unsqueeze(0)
+            fish_weight = weight_model(input_data)
+            weight_mean = fish_weight.mean().item()
+            
+
     cap.release()
     if writer:
         writer.release()
-    cv2.destroyAllWindows()
+    # cv2.destroyAllWindows()
+
+    mean_width = input_data[:,0].mean().item()
+    mean_height = input_data[:,1].mean().item()
+    print('------------Summary----------------')
+    print(f'Average Width: {mean_width}')
+    print(f'Average Height: {mean_height}')
+    print(f'Average Mass: {weight_mean}')
+    
+    return mean_width, mean_height, weight_mean, calibration_factor
+     
 
 
 
@@ -345,6 +444,43 @@ def process_video(video_path, output_path=None):
 # Run example
 # -------------------------------------------------------------------
 if __name__ == "__main__":
-    video_path = "/home/dnn/Downloads/OneDrive_2026-02-18/Week 1/IMG_2342.MOV"
-    output_path = "fish_detect_output.mp4"
-    process_video(video_path, output_path)
+
+    # --- Configuration ---
+    video_path = '/home/dnn/Downloads/OneDrive_1_2-23-2026/Week 4'
+    save_file = 'results.csv'
+
+    # Get list of videos (filtering for common video extensions)
+    video_list = [f for f in os.listdir(video_path) if f.endswith(('.mp4', '.avi', '.MOV'))]
+
+    # video_list = ['IMG_2570.MOV']
+
+    # --- Processing Loop ---
+    for each_video in video_list:
+        full_path = os.path.join(video_path, each_video)
+        
+        try:
+            # 1. Run your processing function
+            mean_width, mean_height, weight_mean, calibration_factor = process_video(full_path)
+            
+            # 2. Create a temporary DataFrame for the current row
+            df_row = pd.DataFrame([{
+                'video_name': os.path.join(video_path.split('/')[-1],each_video),
+                'mean_width': mean_width,
+                'mean_height': mean_height,
+                'weight_mean': weight_mean,
+                'calibration_factor':calibration_factor
+            }])
+            
+            # 3. Append to CSV
+            # header=not os.path.exists(...) ensures header is only written once
+            df_row.to_csv(save_file, 
+                        mode='a', 
+                        index=False, 
+                        header=not os.path.exists(save_file))
+            
+            print(f"Successfully processed: {each_video}")
+
+        except Exception as e:
+            print(f"Error processing {each_video}: {e}")
+
+    print(f"\nAll results saved to {save_file}")
