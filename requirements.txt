@@ -1,4 +1,4 @@
-opencv
+opencv-python
 numpy>=1.15
 pycocotools>=2.0.2
 pillow==7.1.1
