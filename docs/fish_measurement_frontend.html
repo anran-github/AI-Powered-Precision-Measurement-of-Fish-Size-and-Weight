@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-based Fish Measurement Platform</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 18px;
+    }
+
+    canvas {
+      border: 1px solid #444;
+      touch-action: none;
+    }
+
+    #controls {
+      margin-bottom: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    #sideInfo {
+      margin-left: 20px;
+    }
+
+    .small {
+      font-size: 0.9rem;
+      color: #333;
+    }
+
+    #calibPreview {
+      max-width: 320px;
+      display: block;
+      margin-top: 8px;
+      border: 1px solid #ccc;
+    }
+
+    .btn {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid #888;
+      background: #f7f7f7;
+    }
+
+    .btn-primary {
+      background: #2b7cff;
+      color: white;
+      border-color: #1b5fd6;
+    }
+
+    /* Popup modal styles */
+    #popup {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      justify-content: center;
+      align-items: center;
+    }
+
+    #popupContent {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 90%;
+      max-height: 90%;
+      overflow: auto;
+    }
+
+    #popupContent img {
+      max-width: 100%;
+      max-height: 80vh;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>AI-based Fish Measurement Platform</h2>
+
+  <div id="controls">
+    <!-- Folder selector (existing) -->
+    <label class="small">Select image folder:</label>
+    <input type="file" accept="image/*" webkitdirectory multiple onchange="loadFolder(event)">
+
+    <!-- Calibration file (separate upload) -->
+    <label class="small">Upload calibration image (optional):</label>
+    <input type="file" accept="image/*" id="calibrationFile" onchange="startCalibrationFromFile(event)">
+
+    <!-- Buttons -->
+    <button class="btn" onclick="startCalibrationForCurrent()">Calibrate current image</button>
+    <button class="btn" id="confirmCalibBtn" onclick="confirmCalibration()" disabled>Confirm Calibration</button>
+    <button class="btn" id="cancelCalibBtn" onclick="cancelCalibration()" disabled>Cancel</button>
+
+    <!-- Backend URL Configuration -->
+    <label class="small">Backend URL:</label>
+    <input type="text" id="backendUrl" value="http://127.0.0.1:8000" style="width:200px; padding:4px;" />
+
+    <label class="small">Mode:</label>
+    <select id="modeSelect">
+      <option value="real-time">Real-time Mode</option>
+      <option value="offline">Offline Mode</option>
+    </select>
+  </div>
+
+  <div style="display:flex; gap:20px; align-items:flex-start;">
+    <div>
+      <h3 id="imageName">Current Image: -</h3>
+      <canvas id="canvas"></canvas>
+      <div style="margin-top:8px;">
+        <button class="btn" onclick="previousImage()">Previous Image</button>
+        <button class="btn" onclick="nextImage()">Next Image</button>
+        <button class="btn btn-primary" onclick="saveResultsAndNext()">Save & Next</button>
+        <!-- <button class="btn" onclick="saveResultsToExcel()">Save All Results</button> -->
+        <button class="btn" onclick="downloadResults()">Download All Results</button>
+      </div>
+    </div>
+
+    <div id="sideInfo">
+      <h3>Size & Weight</h3>
+      <p id="Length">Length: -</p>
+      <p id="Height">Height: -</p>
+      <p id="Area">Area: -</p>
+      <h3>Weight</h3>
+      <p id="Weight">Weight: -</p>
+
+      <h3>Calibration</h3>
+      <p class="small">When calibrating: draw a rectangle around the reference coin (mouse or touch), then press
+        <b>Confirm Calibration</b>.
+      </p>
+      <p id="calibStatus">Calibration: not set</p>
+    </div>
+  </div>
+
+  <!-- Popup Modal -->
+  <div id="popup">
+    <div id="popupContent">
+      <h3>Calibration Result</h3>
+      <img id="popupImage" src="" alt="Calibration result">
+      <br><br>
+      <button class="btn btn-primary" onclick="closePopup()">Close</button>
+    </div>
+  </div>
+
+  <script>
+    /* ---- Globals ---- */
+    let sessionId = crypto.randomUUID();  // unique per page load
+    let imageFiles = [];
+    let currentIndex = 0;
+    let allDetections = [];          // accumulate results for saving
+    let displayImg = null;           // Image() displayed in canvas
+    let displayFile = null;          // File associated with the canvas
+    let displayScaleX = 1;           // canvas.width / originalWidth
+    let displayScaleY = 1;           // canvas.height / originalHeight
+
+    // calibration drawing state
+    let calibrationMode = false;
+    let isDrawing = false;
+    let startX = 0, startY = 0, curX = 0, curY = 0;
+    let hasROI = false;
+    let currentBBox = null;          // last detection bbox in canvas coords
+    let calibrationFactor = null;    // value returned by server
+
+    /* ---- Utility: show any file on canvas ---- */
+    function showImageFileOnCanvas(file, autoDetect = true) {
+      displayFile = file;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const img = new Image();
+        img.onload = function () {
+          displayImg = img;
+          // limit display size for usability
+          const maxWidth = 900, maxHeight = 700;
+          let width = img.width, height = img.height;
+          if (width > maxWidth || height > maxHeight) {
+            const aspect = width / height;
+            if (width > height) {
+              width = maxWidth;
+              height = Math.round(width / aspect);
+            } else {
+              height = maxHeight;
+              width = Math.round(height * aspect);
+            }
+          }
+          const canvas = document.getElementById('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          displayScaleX = canvas.width / img.width;   // multiply original coords by this -> canvas coords
+          displayScaleY = canvas.height / img.height;
+
+          redrawCanvas(); // draws image and overlays
+
+          if (autoDetect) {
+            sendImageToAPI(); // uses displayFile
+          }
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* ---- Folder loading & navigation ---- */
+    function loadFolder(event) {
+      imageFiles = Array.from(event.target.files).filter(f => f.type.startsWith('image/'));
+      imageFiles.sort((a, b) => a.name.localeCompare(b.name)); // optional
+      currentIndex = 0;
+      allDetections = [];
+      if (imageFiles.length > 0) {
+        showImageFileOnCanvas(imageFiles[currentIndex], true);
+        document.getElementById('imageName').innerText = `Current Image: ${imageFiles[currentIndex].name}`;
+      } else {
+        alert('No images found in the selected folder.');
+      }
+    }
+    function nextImage() {
+      if (currentIndex < imageFiles.length - 1) {
+        clearDetections();
+        currentIndex++;
+        showImageFileOnCanvas(imageFiles[currentIndex], true);
+        document.getElementById('imageName').innerText =
+          `Current Image: ${imageFiles[currentIndex].name}`;
+      } else {
+        alert('You have reached the last image.');
+      }
+    }
+
+    function previousImage() {
+      if (currentIndex > 0) {
+        clearDetections();
+        currentIndex--;
+        showImageFileOnCanvas(imageFiles[currentIndex], true);
+        document.getElementById('imageName').innerText =
+          `Current Image: ${imageFiles[currentIndex].name}`;
+      } else {
+        alert('You are at the first image.');
+      }
+    }
+
+    /* ---- Redraw canvas (image + overlays) ---- */
+    function redrawCanvas() {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!displayImg) return;
+      ctx.drawImage(displayImg, 0, 0, canvas.width, canvas.height);
+
+      // draw last detection bbox (solid red)
+      if (currentBBox) {
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(currentBBox[0][0], currentBBox[0][1]);
+        for (let i = 1; i < currentBBox.length; i++) ctx.lineTo(currentBBox[i][0], currentBBox[i][1]);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // draw calibration ROI if present (dashed blue)
+      if (hasROI) {
+        const x = Math.min(startX, curX);
+        const y = Math.min(startY, curY);
+        const w = Math.abs(curX - startX);
+        const h = Math.abs(curY - startY);
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00aaff';
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+      }
+    }
+
+    /* ---- Send image to /detect/ ---- */
+    async function sendImageToAPI() {
+      if (!displayFile) return;
+      const form = new FormData();
+      form.append('file', displayFile);
+      form.append("session_id", sessionId);
+
+      const backendUrl = document.getElementById('backendUrl').value.replace(/\/$/, "");
+
+      try {
+        const resp = await fetch(`${backendUrl}/detect/?session_id=${sessionId}`, { method: 'POST', body: form });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const result = await resp.json();
+
+        // Map server bbox (original-image coords) to canvas coords
+        if (result && result.bounding_box) {
+          currentBBox = result.bounding_box.map(([x, y]) => [x * displayScaleX, y * displayScaleY]);
+          redrawCanvas();
+        } else {
+          currentBBox = null;
+          redrawCanvas();
+        }
+
+        // Display numeric results
+        document.getElementById('Length').innerText = `Length: ${result.fish_width.toFixed(2)} cm`;
+        document.getElementById('Height').innerText = `Height: ${result.fish_height.toFixed(2)} cm`;
+        document.getElementById('Area').innerText = `Area: ${result.fish_area.toFixed(2)} cm²`;
+        document.getElementById('Weight').innerText = `Weight: ${result.fish_mass.toFixed(2)} g`;
+
+        // append to allDetections for saving
+        allDetections.push({
+          image_name: displayFile.name,
+          length: result.fish_width.toFixed(2),
+          height: result.fish_height.toFixed(2),
+          area: result.fish_area.toFixed(2),
+          weight: result.fish_mass.toFixed(2)
+        });
+
+      } catch (err) {
+        console.error('Error processing image:', err);
+        alert('Detection failed: ' + err.message);
+      }
+    }
+
+    /* ---- Save functions ---- */
+    async function saveResultsToExcel() {
+      if (allDetections.length === 0) { alert('No data to save.'); return; }
+      const backendUrl = document.getElementById('backendUrl').value.replace(/\/$/, "");
+      try {
+        const resp = await fetch(`${backendUrl}/save_results/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(allDetections)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        alert('Results saved successfully to Excel.');
+      } catch (err) {
+        console.error('Error saving:', err);
+        alert('Save failed: ' + err.message);
+      }
+    }
+
+
+    function saveResults() {
+      const backendUrl = document.getElementById('backendUrl').value.replace(/\/$/, "");
+      fetch(`${backendUrl}/save_results_session/?session_id=${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allDetections)
+      }).then(res => res.json())
+        .then(data => console.log(data))
+        .catch(err => console.error(err));
+    }
+
+    function downloadResults() {
+      const backendUrl = document.getElementById('backendUrl').value.replace(/\/$/, "");
+      fetch(`${backendUrl}/download_results_session/?session_id=${sessionId}`)
+        .then(resp => {
+          if (!resp.ok) throw new Error("No results for this session.");
+          return resp.blob();
+        })
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "measurement_results.xlsx";
+          a.click();
+          a.remove();
+        })
+        .catch(err => alert(err));
+    }
+
+    async function saveResultsAndNext() {
+      if (allDetections.length === 0) { alert('No data to save.'); return; }
+      try {
+        // await fetch('https://wrote-storage-trained-norman.trycloudflare.com/save_results/', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(allDetections)
+        // });
+        saveResults();
+        // clear stored detections if you want after saving (optional)
+        allDetections = [];
+        nextImage();
+      } catch (err) {
+        console.error('Error saving & next:', err);
+      }
+    }
+
+    /* ---- Calibration: start from a separate file upload ---- */
+    function startCalibrationFromFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      // display image but do not auto-detect
+      showImageFileOnCanvas(file, false);
+      document.getElementById('imageName').innerText = `Calibration Image: ${file.name}`;
+      enterCalibrationMode();
+    }
+
+    /* ---- Calibration: start with current displayed image ---- */
+    function startCalibrationForCurrent() {
+      if (!displayFile) { alert('No displayed image to calibrate.'); return; }
+      enterCalibrationMode();
+      document.getElementById('imageName').innerText = `Calibrating Image: ${displayFile.name}`;
+    }
+
+    /* ---- Enter/Exit calibration UI state ---- */
+    function enterCalibrationMode() {
+      calibrationMode = true;
+      hasROI = false;
+      currentBBox = null;       // hide detection overlay while calibrating
+      document.getElementById('confirmCalibBtn').disabled = true;
+      document.getElementById('cancelCalibBtn').disabled = false;
+      document.getElementById('calibStatus').innerText = 'Calibration: draw ROI then press Confirm';
+    }
+    function cancelCalibration() {
+      calibrationMode = false;
+      hasROI = false;
+      isDrawing = false;
+      document.getElementById('confirmCalibBtn').disabled = true;
+      document.getElementById('cancelCalibBtn').disabled = true;
+      document.getElementById('calibStatus').innerText = 'Calibration: cancelled';
+      // redraw original image and any last detection
+      redrawCanvas();
+    }
+
+    /* ---- Canvas interaction for drawing ROI (mouse + touch) ---- */
+    const canvas = document.getElementById('canvas');
+    canvas.addEventListener('mousedown', (e) => {
+      if (!calibrationMode) return;
+      const rect = canvas.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+      curX = startX; curY = startY;
+      isDrawing = true;
+      hasROI = false;
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!calibrationMode || !isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      curX = e.clientX - rect.left;
+      curY = e.clientY - rect.top;
+      hasROI = true;
+      document.getElementById('confirmCalibBtn').disabled = false;
+      redrawCanvas();
+    });
+    canvas.addEventListener('mouseup', (e) => {
+      if (!calibrationMode) return;
+      isDrawing = false;
+      if (hasROI) {
+        document.getElementById('confirmCalibBtn').disabled = false;
+      }
+    });
+    canvas.addEventListener('mouseleave', (e) => {
+      if (!calibrationMode) return;
+      if (isDrawing) {
+        isDrawing = false;
+        if (hasROI) document.getElementById('confirmCalibBtn').disabled = false;
+      }
+    });
+
+    // touch events
+    canvas.addEventListener('touchstart', (e) => {
+      if (!calibrationMode) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      startX = t.clientX - rect.left;
+      startY = t.clientY - rect.top;
+      curX = startX; curY = startY;
+      isDrawing = true; hasROI = false;
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      if (!calibrationMode || !isDrawing) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      curX = t.clientX - rect.left;
+      curY = t.clientY - rect.top;
+      hasROI = true;
+      document.getElementById('confirmCalibBtn').disabled = false;
+      redrawCanvas();
+    });
+    canvas.addEventListener('touchend', (e) => {
+      if (!calibrationMode) return;
+      e.preventDefault();
+      isDrawing = false;
+    });
+
+    /* ---- Confirm calibration: send file + ROI to server ---- */
+    async function confirmCalibration() {
+      if (!hasROI) { alert('Draw a rectangle around the reference coin first.'); return; }
+      if (!displayFile) { alert('No image available to send.'); return; }
+
+      const x_canvas = Math.round(Math.min(startX, curX));
+      const y_canvas = Math.round(Math.min(startY, curY));
+      const w_canvas = Math.round(Math.abs(curX - startX));
+      const h_canvas = Math.round(Math.abs(curY - startY));
+      if (w_canvas <= 0 || h_canvas <= 0) { alert('Invalid ROI.'); return; }
+
+      const origScaleX = displayImg.naturalWidth / canvas.width;
+      const origScaleY = displayImg.naturalHeight / canvas.height;
+      const x_orig = Math.max(0, Math.round(x_canvas * origScaleX));
+      const y_orig = Math.max(0, Math.round(y_canvas * origScaleY));
+      const w_orig = Math.max(1, Math.round(w_canvas * origScaleX));
+      const h_orig = Math.max(1, Math.round(h_canvas * origScaleY));
+
+      const form = new FormData();
+      form.append('file', displayFile);
+      form.append('session_id', sessionId);
+      form.append('x', String(x_orig));
+      form.append('y', String(y_orig));
+      form.append('w', String(w_orig));
+      form.append('h', String(h_orig));
+
+      document.getElementById('calibStatus').innerText = 'Uploading and computing...';
+      document.getElementById('confirmCalibBtn').disabled = true;
+      const backendUrl = document.getElementById('backendUrl').value.replace(/\/$/, "");
+
+      try {
+        const resp = await fetch(`${backendUrl}/calibrate_remote/?session_id=${sessionId}`, { method: 'POST', body: form });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(txt || `HTTP ${resp.status}`);
+        }
+        const j = await resp.json();
+        calibrationFactor = j.scale_factor;
+        document.getElementById('calibStatus').innerText = `Calibration set: ${calibrationFactor.toFixed(6)} cm/pixel`;
+
+        if (j.preview) {
+          // still update the sidebar preview if needed
+          // document.getElementById('calibPreview').src = j.preview;
+
+          // show popup once
+          document.getElementById('popupImage').src = j.preview;
+          document.getElementById('popup').style.display = 'flex';
+        }
+
+        calibrationMode = false;
+        hasROI = false;
+        document.getElementById('cancelCalibBtn').disabled = true;
+        document.getElementById('confirmCalibBtn').disabled = true;
+
+        await sendImageToAPI();
+      } catch (err) {
+        console.error('Calibration error:', err);
+        alert('Calibration failed: ' + err.message);
+        document.getElementById('calibStatus').innerText = 'Calibration failed';
+        document.getElementById('confirmCalibBtn').disabled = false;
+      }
+    }
+
+    /* ---- Popup control ---- */
+    function closePopup() {
+      document.getElementById('popup').style.display = 'none';
+    }
+
+    function clearDetections() {
+      // reset detection state
+      currentBBox = null;
+
+      // clear canvas and redraw image (without any bbox)
+      redrawCanvas();
+    }
+
+    /* ---- Initialization: blank canvas ---- */
+    (function init() {
+      const canvas = document.getElementById('canvas');
+      canvas.width = 640; canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#eee';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#444';
+      ctx.font = '16px Arial';
+      ctx.fillText('Load images to begin', 12, 24);
+    })();
+  </script>
+</body>
+
+</html>
