@@ -268,7 +268,7 @@ detector = YOLOInference(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 weight_model = WeightNet().to(device)
 
-weight_model.load_state_dict(torch.load('fish_saved_weights/model_epoch80_0.15009590983390808.pth'))
+weight_model.load_state_dict(torch.load('fish_saved_weights/model_epoch80_0.15009590983390808.pth', map_location=device, weights_only=True))
 weight_model.eval()
 print('model loaded')
 
